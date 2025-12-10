@@ -1,5 +1,6 @@
 import logging
 
+from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 
 from data.repo.cross_repository import CrossRepository
@@ -44,16 +45,13 @@ app.add_middleware(
 
 
 repo = CrossRepository()
-
+class Recording(BaseModel):
+    position: int
+    time: float
 
 @app.get("/")
 async def root():
     return RedirectResponse(url="/docs")
-
-
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
 
 @app.get("/crosses")
 async def get_crosses():
@@ -63,3 +61,24 @@ async def get_crosses():
 async def get_cross(id_cross:int):
     return await repo.get_cross(id_cross)
 
+@app.post("/crosses/{serial_number}/{id_cross}")
+async def add_runner(serial_number:str, id_cross:int):
+    return await repo.add_runner(serial_number, id_cross)
+
+@app.get("/crosses/runners/{cross_id}")
+async def get_runners(cross_id:int):
+    return await repo.get_all_runners(cross_id)
+
+
+
+
+@app.post("/crosses/runner/{serial_number}/{id_cross}")
+async def add_runner(serial_number:str, id_cross:int):
+    return await repo.add_runner(serial_number, id_cross)
+
+# ... existing code ...
+
+@app.post("/crosses/{cross_id}")
+async def save_cross_recordings(cross_id: int, recordings: list[Recording]):
+    """Save recordings for a specific cross"""
+    return await repo.save_recordings(cross_id, recordings)

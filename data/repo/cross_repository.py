@@ -37,3 +37,14 @@ class CrossRepository:
 
     async def get_all_runners(self, cross_id: int) -> list[Runner]:
         pass
+
+    async def add_cross(self, cross_id:int, cross:list[tuple[int,float]]):
+        pass
+
+    async def save_recordings(self, cross_id, recordings):
+        cross:Cross = await self.get_cross(cross_id)
+        
+        async with self._db.session_maker() as session:
+            session.add(cross)
+            await session.commit()
+
