@@ -1,8 +1,10 @@
 import logging
+from typing import List
 
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 
+from data.model.db_model import Runner
 from data.repo.cross_repository import CrossRepository
 
 from fastapi import FastAPI
@@ -80,6 +82,8 @@ async def add_runner(serial_number:str, id_cross:int):
 
 @app.post("/crosses/{cross_id}")
 async def save_cross_recordings(cross_id: int, recordings: list[Recording]):
-    """Save recordings for a specific cross"""
+    runners:List[Runner] = []
+    for recording in recordings:
+        runners.append(Runner(running_time=recording.time, serial_number=None))
 
-    return await repo.save_recordings(cross_id, recordings)
+    return await repo.save_recordings(cross_id, runners)

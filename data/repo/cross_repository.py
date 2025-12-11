@@ -1,9 +1,11 @@
 import logging
-from typing import Any
+from typing import Any, List
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from data.core.db_connection import DatabaseConnection
 from data.model.db_model import Cross, Runner, CrossRunners
+
 
 
 class CrossRepository:
@@ -44,18 +46,22 @@ class CrossRepository:
 
         # ... existing code ...
 
-    async def save_recordings(self, cross_id, recordings):
+    async def save_recordings(self, cross_id, runners: List[Runner]):
         async with self._db.session_maker() as session:
-            stmt = select(Cross).where(Cross.id == cross_id)
-            result = await session.scalars(stmt)
-            cross = result.one_or_none()
+            try:
+                stmt = select(Cross).where(Cross.id == cross_id).options(selectinload(Cross.runners))
+                result = await session.scalars(stmt)
+                cross = result.one_or_none()
 
-            if cross is None:
-                self._logger.error(f"Cross with id {cross_id} not found")
+                if cross is None:
+                    self._logger.error(f"Cross with id {cross_id} not found")
+                    return
+
+                for runner in runners:
+                    cross.runners.append(runner)
+
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                self._logger.error(e)
                 return
-
-            for recording in recordings:
-                runner = Runner(serial_number=None, running_time=recording.running_time)
-                cross.runners.append(runner)
-
-            await session.commit()
