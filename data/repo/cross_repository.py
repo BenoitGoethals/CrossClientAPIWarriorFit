@@ -3,7 +3,8 @@ from typing import Any
 from sqlalchemy import select
 
 from data.core.db_connection import DatabaseConnection
-from data.model.db_model import Cross, Runner
+from data.model.db_model import Cross, Runner, CrossRunners
+
 
 class CrossRepository:
 
@@ -14,7 +15,7 @@ class CrossRepository:
 
     async def get_all_crosses(self) -> Any | None:
         async with self._db.session_maker() as session:
-            stmt = select(Cross).order_by(Cross.id)
+            stmt = select(Cross).filter(Cross.executed==False).order_by(Cross.id)
             try:
                 result = await session.scalars(stmt)
                 return result.all()
@@ -41,10 +42,20 @@ class CrossRepository:
     async def add_cross(self, cross_id:int, cross:list[tuple[int,float]]):
         pass
 
-    async def save_recordings(self, cross_id, recordings):
-        cross:Cross = await self.get_cross(cross_id)
-        
-        async with self._db.session_maker() as session:
-            session.add(cross)
-            await session.commit()
+        # ... existing code ...
 
+    async def save_recordings(self, cross_id, recordings):
+        async with self._db.session_maker() as session:
+            stmt = select(Cross).where(Cross.id == cross_id)
+            result = await session.scalars(stmt)
+            cross = result.one_or_none()
+
+            if cross is None:
+                self._logger.error(f"Cross with id {cross_id} not found")
+                return
+
+            for recording in recordings:
+                runner = Runner(serial_number=None, running_time=recording.running_time)
+                cross.runners.append(runner)
+
+            await session.commit()

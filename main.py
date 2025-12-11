@@ -81,4 +81,5 @@ async def add_runner(serial_number:str, id_cross:int):
 @app.post("/crosses/{cross_id}")
 async def save_cross_recordings(cross_id: int, recordings: list[Recording]):
     """Save recordings for a specific cross"""
+
     return await repo.save_recordings(cross_id, recordings)
