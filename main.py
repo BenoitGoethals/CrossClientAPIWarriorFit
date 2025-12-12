@@ -34,6 +34,7 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:8080",
+
     "*",  # Allow all origins - remove in production for security
 ]
 
