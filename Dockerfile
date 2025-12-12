@@ -32,4 +32,4 @@ RUN uv sync --frozen
 EXPOSE 8555
 
 # Run the app
-CMD ["uv", "run", "python", "main.py","--host", "0.0.0.0", "--port", "8555"]
+CMD ["uv", "run", "python", "main:app","--host", "0.0.0.0", "--port", "8555"]
