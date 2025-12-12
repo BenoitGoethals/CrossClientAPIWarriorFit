@@ -30,7 +30,7 @@ ENV APP_ENV=test
 # Install the project itself (if configured as a package)
 RUN uv sync --frozen
 
-EXPOSE 8550
+EXPOSE 8555
 
 # Run the app
 CMD ["uv", "run", "python", "main.py"]
