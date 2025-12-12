@@ -4,8 +4,8 @@ from typing import List
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 
-from data.model.db_model import Runner
-from data.repo.cross_repository import CrossRepository
+from src.model.db_model import Runner
+from src.repo.cross_repository import CrossRepository
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title="WarriorFit API",
     description="API for accessing the WarriorFit running event database",
-    version="1.0.0"
+    version="1.0.1",
+    docs_url = "/docs" ,
+    port = 8550
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Configure logging to output to both file and console
@@ -21,7 +30,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("app.log"),
+        logging.FileHandler("../app.log"),
         logging.StreamHandler()
     ],
     force=True
@@ -29,22 +38,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# CORS configuration
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:8080",
 
-    "*",  # Allow all origins - remove in production for security
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
-)
 
 
 repo = CrossRepository()

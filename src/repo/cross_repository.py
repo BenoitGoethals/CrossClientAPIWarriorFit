@@ -3,9 +3,8 @@ from typing import Any, List
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from data.core.db_connection import DatabaseConnection
-from data.model.db_model import Cross, Runner, CrossRunners
-
+from src.core.db_connection import DatabaseConnection
+from src.model.db_model import Cross, Runner
 
 
 class CrossRepository:

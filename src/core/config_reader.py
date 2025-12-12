@@ -37,7 +37,7 @@ class ConfigReader:
     def __init__(self, config_path: str | Path | None = None):
         if self._config is None:
             if config_path is None:
-                config_path = Path(__file__).parent.parent.parent/ "config/config.yml"
+                config_path = Path(__file__).parent.parent.parent/ "src/config/config.yml"
             self._load_config(Path(config_path))
 
     def _load_config(self, config_path: Path) -> None:
