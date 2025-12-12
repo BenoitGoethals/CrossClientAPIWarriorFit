@@ -1,12 +1,11 @@
-# Use Python 3.13 as the base image
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim
 
-# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
+     # Add /app to PYTHONPATH so python can find the 'warriorfit' package
     PYTHONPATH="/app"
 
 # Set working directory
@@ -33,4 +32,4 @@ RUN uv sync --frozen
 EXPOSE 8555
 
 # Run the app
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "python", "main.py","--host", "0.0.0.0", "--port", "8555"]
