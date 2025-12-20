@@ -72,18 +72,14 @@ async def get_runners(cross_id:int):
     return await repo.get_all_runners(cross_id)
 
 
-
-
 @app.post("/crosses/runner/{serial_number}/{id_cross}")
 async def add_runner(serial_number:str, id_cross:int):
     return await repo.add_runner(serial_number, id_cross)
 
-# ... existing code ...
 
 @app.post("/crosses/{cross_id}")
 async def save_cross_recordings(cross_id: int, recordings: list[Recording]):
     runners:List[Runner] = []
     for recording in recordings:
         runners.append(Runner(running_time=recording.time, serial_number=None))
-
     return await repo.save_recordings(cross_id, runners)

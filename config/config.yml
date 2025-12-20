@@ -1,6 +1,6 @@
 database:
   driver: postgresql+asyncpg  # or sqlite+aiosqlite, mysql+aiomysql
-  host: 192.168.0.30
+  host: 78.21.255.210 #192.168.0.30
   port: 5432
   username: benoi
   password: ranger14
