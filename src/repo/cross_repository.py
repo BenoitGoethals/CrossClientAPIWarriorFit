@@ -3,9 +3,8 @@ from typing import Any, List
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from data.core.db_connection import DatabaseConnection
-from data.model.db_model import Cross, Runner, CrossRunners
-
+from src.core.db_connection import DatabaseConnection
+from src.model.db_model import Cross, Runner
 
 
 class CrossRepository:
@@ -52,16 +51,14 @@ class CrossRepository:
                 stmt = select(Cross).where(Cross.id == cross_id).options(selectinload(Cross.runners))
                 result = await session.scalars(stmt)
                 cross = result.one_or_none()
-
                 if cross is None:
                     self._logger.error(f"Cross with id {cross_id} not found")
                     return
-
                 for runner in runners:
                     cross.runners.append(runner)
-
+                cross.executed = True
                 await session.commit()
             except Exception as e:
-                await session.rollback()
+
                 self._logger.error(e)
                 return
