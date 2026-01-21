@@ -4,4 +4,4 @@ database:
   port: 5432
   username: benoi
   password: ranger14
-  database: warriorfit
+  database: warriorfit_test

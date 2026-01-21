@@ -21,6 +21,12 @@ This project provides a RESTful API to interact with the WarriorFit database. Wa
 - **Package Manager**: uv
 
 ## Installation
+gh repo sync
+sudo docker stop api-warriorfit-app
+sudo docker rm api-warriorfit-app
+sudo docker build -t api-warriorfit-app .
+sudo docker run -d --restart unless-stopped --name api-warriorfit-app -p 8555:8555 api-warriorfit-app
+
 
 
 
