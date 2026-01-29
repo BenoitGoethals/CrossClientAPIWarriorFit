@@ -5,3 +5,6 @@ database:
   username: benoi
   password: ranger14
   database: warriorfit_test
+
+api:
+  secret_key: warriorfit_cross_the_world
