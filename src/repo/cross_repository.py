@@ -8,15 +8,38 @@ from src.model.db_model import Cross, Runner
 
 
 class CrossRepository:
+    """
+    Handles operations related to cross entities and their runners.
 
+    This class provides methods to manage cross entities and their runners, including retrieving,
+    modifying, and saving data related to crosses and runners. It interacts with a database and
+    maintains persistent storage of these entities. It also integrates logging for error handling.
+
+    :ivar db: Manages the database connection and sessions.
+    :type db: DatabaseConnection
+    :ivar logger: Handles logging for error and activity tracking.
+    :type logger: logging.Logger
+    """
 
     def __init__(self):
         self._db = DatabaseConnection()
         self._logger = logging.getLogger(__name__)
 
     async def get_all_crosses(self) -> Any | None:
+        """
+        Asynchronously retrieves all unexecuted "Cross" entities from the database.
+
+        This method queries the database to fetch all "Cross" entities where the
+        'executed' attribute is set to False. The results are ordered by their IDs
+        and include the related "runners" data using a lazy loading strategy. If
+        an exception occurs during the database operation, it logs the error
+        and returns None.
+
+        :return: A list of unexecuted "Cross" entities, or None if an error occurs.
+        :rtype: Any | None
+        """
         async with self._db.session_maker() as session:
-            stmt = select(Cross).filter(Cross.executed==False).order_by(Cross.id)
+            stmt = select(Cross).filter(Cross.executed == False).order_by(Cross.id).options(selectinload(Cross.runners))
             try:
                 result = await session.scalars(stmt)
                 return result.all()
@@ -25,8 +48,20 @@ class CrossRepository:
                 return None
 
     async def get_cross(self, id_cross: int) -> Cross | None:
+        """
+        Asynchronously retrieves a `Cross` object by its unique identifier. This
+        operation queries the database for a specific `Cross` record and includes
+        its associated `runners` relationships using `selectinload` for performance
+        optimization. If found, the method returns the `Cross` object; otherwise, it
+        returns `None`.
+
+        :param id_cross: The unique identifier of the `Cross` object to retrieve.
+        :type id_cross: int
+        :return: A `Cross` object if found, or `None` if no match exists in the database.
+        :rtype: Cross | None
+        """
         async with self._db.session_maker() as session:
-            stmt = select(Cross).where(Cross.id == id_cross)
+            stmt = select(Cross).where(Cross.id == id_cross).options(selectinload(Cross.runners))
             try:
                 result = await session.scalars(stmt)
                 return result.one_or_none()
@@ -40,12 +75,20 @@ class CrossRepository:
     async def get_all_runners(self, cross_id: int) -> list[Runner]:
         pass
 
-    async def add_cross(self, cross_id:int, cross:list[tuple[int,float]]):
+    async def add_cross(self, cross_id: int, cross: list[tuple[int, float]]):
         pass
 
-        # ... existing code ...
-
     async def save_recordings(self, cross_id, runners: List[Runner]):
+        """
+        Saves the provided runner recordings to the database, associating them with the specified cross ID.
+        Marks the cross as executed upon successful addition of all runners.
+
+        :param cross_id: The unique identifier for the cross to which runners are to be associated.
+        :type cross_id: int
+        :param runners: A list of Runner objects to be saved and associated with the given cross.
+        :type runners: List[Runner]
+        :return: None
+        """
         async with self._db.session_maker() as session:
             try:
                 stmt = select(Cross).where(Cross.id == cross_id).options(selectinload(Cross.runners))
