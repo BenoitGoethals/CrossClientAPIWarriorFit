@@ -24,7 +24,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY src ./src
 
 # Copy SSL certificates
-COPY src/certs ./certs
+COPY certs ./certs
 
 ENV APP_ENV=test
 
