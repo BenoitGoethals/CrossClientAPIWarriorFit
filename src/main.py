@@ -108,3 +108,14 @@ async def save_cross_recordings(cross_id: int, recordings: List[RunnerCreate]):
         runners.append(Runner(running_time=recording.running_time, serial_number=recording.serial_number))
 
     return await repo.save_recordings(cross_id, runners)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8555,
+        ssl_keyfile="./certs/key.pem",
+        ssl_certfile="./certs/cert.pem"
+    )
