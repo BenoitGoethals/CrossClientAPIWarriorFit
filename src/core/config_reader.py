@@ -21,8 +21,14 @@ class DatabaseConfig:
 
 
 @dataclass
+class ApiConfig:
+    secret_key: str
+
+
+@dataclass
 class Config:
     database: DatabaseConfig
+    api: ApiConfig
 
 
 class ConfigReader:
@@ -49,7 +55,8 @@ class ConfigReader:
             raw_config = yaml.safe_load(file)
 
         self._config = Config(
-            database=DatabaseConfig(**raw_config["database"])
+            database=DatabaseConfig(**raw_config["database"]),
+            api=ApiConfig(**raw_config["api"])
         )
 
     @property
