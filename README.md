@@ -479,14 +479,18 @@ uv run python src/main.py
 
 ```bash
 # Build image
-docker build -t warriorfit-api .
+
+sudo docker stop api-warriorfit-app
+sudo docker rm api-warriorfit-app
+
+docker build -t api-warriorfit-app.
 
 # Run container
-docker run -d \
-  --name warriorfit-api \
+sudo docker run -d \
+  --name api-warriorfit-app\
   -p 8555:8555 \
   --restart unless-stopped \
-  warriorfit-api
+ api-warriorfit-app
 
 # View logs
 docker logs -f warriorfit-api
