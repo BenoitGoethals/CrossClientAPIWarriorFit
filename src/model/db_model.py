@@ -7,15 +7,38 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
     Float,
+    Enum as SAEnum,
     func, UniqueConstraint, Date, Enum,
 )
 from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from src.model.role import Role
 
 
 class Base(DeclarativeBase):
     pass
+
+
+
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True, autoincrement=True, nullable=False
+    )
+    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[TIMESTAMP] = mapped_column(
+        TIMESTAMP, server_default=func.now(), nullable=False
+    )
+    role: Mapped[Role] = mapped_column(SAEnum(Role), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
 
 
 # CROSS

@@ -20,11 +20,8 @@ RUN uv sync --frozen --no-install-project
 # Add the virtual environment to the PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy the rest of the application code
+# Copy the rest of the application code (including certs)
 COPY src ./src
-
-# Copy SSL certificates
-COPY src/certs ./certs
 
 ENV APP_ENV=test
 
@@ -34,4 +31,4 @@ RUN uv sync --frozen
 EXPOSE 8555
 
 # Run the app (FastAPI via Uvicorn with SSL)
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8555", "--ssl-keyfile", "./certs/key.pem", "--ssl-certfile", "./certs/cert.pem"]
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8555", "--ssl-keyfile", "./src/certs/key.pem", "--ssl-certfile", "./src/certs/cert.pem"]
