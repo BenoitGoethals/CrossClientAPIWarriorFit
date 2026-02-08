@@ -23,6 +23,9 @@ class DatabaseConfig:
 @dataclass
 class ApiConfig:
     secret_key: str
+    oauth2_secret_key: str = "default_secret_change_me"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
 
 
 @dataclass

@@ -8,3 +8,6 @@ database:
 
 api:
   secret_key: warriorfit_cross_the_world
+  oauth2_secret_key: warriorfit_oauth2_jwt_secret_key_change_in_production
+  algorithm: HS256
+  access_token_expire_minutes: 30

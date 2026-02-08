@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.core.db_connection import DatabaseConnection
-from src.model.db_model import Cross, Runner
+from src.model.db_model import Cross, Runner, User
 
 
 class CrossRepository:
@@ -68,6 +68,40 @@ class CrossRepository:
             except Exception as e:
                 self._logger.error(e)
                 return None
+
+    async def get_user_credentials(self,username:str)->User|None:
+        async with self._db.session_maker() as session:
+            stmt = select(User).where(User.username == username)
+            try:
+                result = await session.scalars(stmt)
+                return result.one_or_none()
+            except Exception as e:
+                self._logger.error(e)
+                return None
+
+    async def update_password_hash(self, username: str, new_hash: str) -> bool:
+        """
+        Updates the password hash for a user (used for bcrypt to Argon2 migration).
+
+        :param username: The username of the user to update
+        :param new_hash: The new Argon2 password hash
+        :return: True if successful, False otherwise
+        """
+        async with self._db.session_maker() as session:
+            stmt = select(User).where(User.username == username)
+            try:
+                result = await session.scalars(stmt)
+                user = result.one_or_none()
+                if user is None:
+                    self._logger.error(f"User {username} not found for password update")
+                    return False
+                user.password_hash = new_hash
+                await session.commit()
+                self._logger.info(f"Password hash upgraded to Argon2 for user: {username}")
+                return True
+            except Exception as e:
+                self._logger.error(f"Failed to update password hash for {username}: {e}")
+                return False
 
     async def add_runner(self, serial_number: str, cross_id: int) -> bool:
         pass
