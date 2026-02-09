@@ -51,7 +51,9 @@ class ConfigReader:
                 app_env = os.getenv("APP_ENV", "development")
                 if app_env == "docker":
                     # Running in Docker container
-                    config_path = Path("/etc/CrossClientAPI/config.yml")
+                    config_path = Path("/etc/CrossClientAPI")
+                    if config_path.is_dir():
+                        config_path = config_path / "config.yml"
                 else:
                     # Running in IDE/development
                     config_path = Path(__file__).parent.parent / "config" / "config.yml"
