@@ -61,6 +61,10 @@ class ConfigReader:
 
     def _load_config(self, config_path: Path) -> None:
         """Load configuration from YAML file."""
+        # If config_path is a directory, look for config.yml inside it
+        if config_path.is_dir():
+            config_path = config_path / "config.yml"
+
         if not config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 

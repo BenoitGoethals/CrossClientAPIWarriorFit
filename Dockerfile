@@ -23,12 +23,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy the rest of the application code (including certs)
 COPY src ./src
 
-# Remove config directory from container - config will be mounted from host
-RUN rm -rf ./src/config
-
-# Set APP_ENV to docker to use /etc/CrossClientAPI/config.yml
-# Mount config from host: -v /path/to/config.yml:/etc/CrossClientAPI/config.yml
-ENV APP_ENV=docker
+ENV APP_ENV=test
 
 # Install the project itself (if configured as a package)
 RUN uv sync --frozen
