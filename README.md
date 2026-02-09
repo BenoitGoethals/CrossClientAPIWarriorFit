@@ -487,11 +487,11 @@ docker build -t api-warriorfit-app.
 
 # Run container
 sudo docker run -d \
-  --name api-warriorfit-app\
+  --name api-warriorfit-app \
   -p 8555:8555 \
   --restart unless-stopped \
-  -v /path/to/config.yml:/etc/CrossClientAPI/config.yml \
- api-warriorfit-app
+  -v /home/benoit/path/to/config:/etc/CrossClientAPI \
+  api-warriorfit-app
 
 # View logs
 docker logs -f warriorfit-api
