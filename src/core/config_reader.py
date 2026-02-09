@@ -1,4 +1,5 @@
 import yaml
+import os
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -46,7 +47,14 @@ class ConfigReader:
     def __init__(self, config_path: str | Path | None = None):
         if self._config is None:
             if config_path is None:
-                config_path = Path(__file__).parent.parent.parent/ "src/config/config.yml"
+                # Check APP_ENV environment variable to determine config location
+                app_env = os.getenv("APP_ENV", "development")
+                if app_env == "docker":
+                    # Running in Docker container
+                    config_path = Path("/etc/CrossClientAPI/config.yml")
+                else:
+                    # Running in IDE/development
+                    config_path = Path(__file__).parent.parent / "config" / "config.yml"
             self._load_config(Path(config_path))
 
     def _load_config(self, config_path: Path) -> None:

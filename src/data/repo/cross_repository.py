@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.core.db_connection import DatabaseConnection
-from src.model.db_model import Cross, Runner, User
+from src.data.model.db_model import Cross, Runner, User
 
 
 class CrossRepository:

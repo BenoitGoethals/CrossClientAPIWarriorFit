@@ -122,7 +122,7 @@ async def authenticate_user(username: str, password: str) -> Optional[str]:
     :param password: The plain-text password to verify.
     :return: The username if authentication succeeds, None otherwise.
     """
-    from src.repo.cross_repository import CrossRepository
+    from src.data.repo.cross_repository import CrossRepository
 
     repo = CrossRepository()
     user = await repo.get_user_credentials(username)
@@ -149,7 +149,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
 
     Returns a dict with username and role information.
     """
-    from src.repo.cross_repository import CrossRepository
+    from src.data.repo.cross_repository import CrossRepository
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

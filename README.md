@@ -490,6 +490,7 @@ sudo docker run -d \
   --name api-warriorfit-app\
   -p 8555:8555 \
   --restart unless-stopped \
+  -v /path/to/config.yml:/etc/CrossClientAPI/config.yml \
  api-warriorfit-app
 
 # View logs

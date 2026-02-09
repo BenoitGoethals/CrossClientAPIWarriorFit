@@ -1,16 +1,14 @@
 import logging
 from typing import List
 from pathlib import Path
-from datetime import timedelta, datetime
+from datetime import timedelta
 
 from starlette.responses import RedirectResponse
 
-from src.model.db_model import Runner
-from src.model.schemas import (
-    CrossResponse, CrossCreate, RunnerResponse,
-    RunnerCreate, UnitResponse, UnitCreate, Token
-)
-from src.repo.cross_repository import CrossRepository
+from src.data.model.db_model import Runner
+from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
+
+from src.data.repo.cross_repository import CrossRepository
 from src.core.config_reader import get_config
 
 from fastapi import FastAPI, Security, HTTPException, status, Request, Depends
