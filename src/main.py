@@ -1,16 +1,15 @@
 import logging
 from typing import List
 from pathlib import Path
-from datetime import timedelta, datetime
+from datetime import timedelta
+from contextlib import asynccontextmanager
 
 from starlette.responses import RedirectResponse
 
-from src.model.db_model import Runner
-from src.model.schemas import (
-    CrossResponse, CrossCreate, RunnerResponse,
-    RunnerCreate, UnitResponse, UnitCreate, Token
-)
-from src.repo.cross_repository import CrossRepository
+from src.data.model.db_model import Runner
+from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
+
+from src.data.repo.cross_repository import CrossRepository
 from src.core.config_reader import get_config
 
 from fastapi import FastAPI, Security, HTTPException, status, Request, Depends
@@ -19,21 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from src.core.oauth2 import authenticate_user, create_access_token, get_current_user
-
-app = FastAPI(
-    title="WarriorFit API",
-    description="API for accessing the WarriorFit running event database",
-    version="1.0.1",
-    docs_url = "/docs" ,
-    port = 8550
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
 
 # Configure logging to output to both file and console
 logging.basicConfig(
@@ -162,6 +146,60 @@ def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
 
     return results
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events.
+    Validates SSL certificates on application startup.
+    """
+    import os
+
+    # Startup: Validate SSL certificates
+    cert_path = os.environ.get("SSL_CERTFILE", "./src/certs/cert.pem")
+    key_path = os.environ.get("SSL_KEYFILE", "./src/certs/key.pem")
+
+    # Only validate if both files exist (SSL is being used)
+    if Path(cert_path).exists() and Path(key_path).exists():
+        logger.info("=" * 60)
+        logger.info("Validating SSL certificates on startup...")
+        validation = validate_ssl_certificates(cert_path, key_path)
+
+        # Display warnings
+        for warning in validation["warnings"]:
+            logger.warning(f"⚠️  {warning}")
+
+        # Display errors but don't stop (uvicorn will handle it)
+        if not validation["valid"]:
+            logger.error("SSL CERTIFICATE VALIDATION FAILED!")
+            for error in validation["errors"]:
+                logger.error(f"❌ {error}")
+        else:
+            logger.info("✅ SSL certificates validated successfully")
+
+        logger.info("=" * 60)
+
+    yield
+
+    # Shutdown: cleanup code would go here if needed
+
+
+app = FastAPI(
+    title="WarriorFit API",
+    description="API for accessing the WarriorFit running event database",
+    version="1.0.1",
+    docs_url = "/docs" ,
+    port = 8550,
+    lifespan=lifespan
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -236,40 +274,6 @@ def require_roles(allowed_roles: List[str]):
 
 
 repo = CrossRepository()
-
-
-@app.on_event("startup")
-async def startup_event():
-    """
-    Validate SSL certificates on application startup.
-
-    This runs when uvicorn starts the app directly (without __main__).
-    """
-    import os
-
-    # Check if running with SSL
-    cert_path = os.environ.get("SSL_CERTFILE", "./src/certs/cert.pem")
-    key_path = os.environ.get("SSL_KEYFILE", "./src/certs/key.pem")
-
-    # Only validate if both files exist (SSL is being used)
-    if Path(cert_path).exists() and Path(key_path).exists():
-        logger.info("=" * 60)
-        logger.info("Validating SSL certificates on startup...")
-        validation = validate_ssl_certificates(cert_path, key_path)
-
-        # Display warnings
-        for warning in validation["warnings"]:
-            logger.warning(f"⚠️  {warning}")
-
-        # Display errors but don't stop (uvicorn will handle it)
-        if not validation["valid"]:
-            logger.error("SSL CERTIFICATE VALIDATION FAILED!")
-            for error in validation["errors"]:
-                logger.error(f"❌ {error}")
-        else:
-            logger.info("✅ SSL certificates validated successfully")
-
-        logger.info("=" * 60)
 
 
 @app.get("/")

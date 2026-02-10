@@ -8,12 +8,11 @@ from sqlalchemy import (
     Boolean,
     Float,
     Enum as SAEnum,
-    func, UniqueConstraint, Date, Enum,
-)
-from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP
+    func, UniqueConstraint, )
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from src.model.role import Role
+from src.data.model.role import Role
 
 
 class Base(DeclarativeBase):
