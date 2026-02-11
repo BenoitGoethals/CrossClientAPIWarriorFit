@@ -11,6 +11,7 @@ from src.core.logging_config import setup_logging
 from src.core.lifespan import lifespan
 from src.core.auth import require_roles
 from src.core.oauth2 import authenticate_user, create_access_token
+from src.core.version_loader import load_version
 from fastapi import FastAPI, HTTPException, status, Request, Depends, Path
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,9 +29,9 @@ config = get_config()
 app = FastAPI(
     title="WarriorFit API",
     description="API for accessing the WarriorFit running event database",
-    version="1.0.1",
-    docs_url = "/docs" ,
-    port = 8550,
+    version=load_version(),
+    docs_url="/docs",
+    port=8550,
     lifespan=lifespan
 )
 app.add_middleware(
