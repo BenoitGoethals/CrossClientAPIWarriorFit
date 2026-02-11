@@ -2,9 +2,7 @@
 import logging
 from typing import List, Annotated
 from datetime import timedelta
-
 from starlette.responses import RedirectResponse
-
 from src.data.model.db_model import Runner
 from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
 from src.data.repo.cross_repository import CrossRepository
@@ -13,7 +11,6 @@ from src.core.logging_config import setup_logging
 from src.core.lifespan import lifespan
 from src.core.auth import require_roles
 from src.core.oauth2 import authenticate_user, create_access_token
-
 from fastapi import FastAPI, HTTPException, status, Request, Depends, Path
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
