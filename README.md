@@ -692,6 +692,34 @@ psql -h localhost -U your_user -d warriorfit_test
 
 ---
 
+## Changelog
+
+### [Unreleased]
+
+#### Added
+- **Version Management System** (2026-02-11)
+  - Added `version_loader` utility to dynamically load application version from `version.yaml`
+  - Improved `version_loader` with multi-path search for `version.yaml` and enhanced error logging
+  - Updated Dockerfile to include `version.yaml`
+  - Load application version dynamically using `load_version()` function
+
+#### Changed
+- **Main Application Refactor** (2026-02-07)
+  - Simplified FastAPI application setup in `main.py`
+  - Removed unused SSL validation logic
+  - Streamlined role-based access control
+  - Enhanced logging throughout the application
+  - Added detailed endpoints with improved error handling
+
+#### Security Enhancements
+- **Authentication & Security** (2026-02-07)
+  - Added comprehensive authentication system
+  - Implemented SSL validation
+  - Enhanced logging utilities
+  - Added test utilities for API validation
+
+---
+
 ## License
 
 Copyright (c) 2025 Goethals Benoit

@@ -20,8 +20,9 @@ RUN uv sync --frozen --no-install-project
 # Add the virtual environment to the PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy the rest of the application code (including certs)
+# Copy the rest of the application code (including certs and version file)
 COPY src ./src
+COPY version.yaml ./version.yaml
 
 ENV APP_ENV=test
 

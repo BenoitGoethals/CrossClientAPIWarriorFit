@@ -1,195 +1,37 @@
+"""WarriorFit API - FastAPI application for running event management."""
 import logging
-from typing import List
-from pathlib import Path
+from typing import List, Annotated
 from datetime import timedelta
-from contextlib import asynccontextmanager
-
 from starlette.responses import RedirectResponse
-
 from src.data.model.db_model import Runner
 from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
-
 from src.data.repo.cross_repository import CrossRepository
 from src.core.config_reader import get_config
-
-from fastapi import FastAPI, Security, HTTPException, status, Request, Depends
-from fastapi.security import APIKeyHeader, OAuth2PasswordRequestForm
+from src.core.logging_config import setup_logging
+from src.core.lifespan import lifespan
+from src.core.auth import require_roles
+from src.core.oauth2 import authenticate_user, create_access_token
+from src.core.version_loader import load_version
+from fastapi import FastAPI, HTTPException, status, Request, Depends, Path
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from src.core.oauth2 import authenticate_user, create_access_token, get_current_user
 
-# Configure logging to output to both file and console
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("../app.log"),
-        logging.StreamHandler()
-    ],
-    force=True
-)
-
+# Setup logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
+# Configuration
+config = get_config()
 
-def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
-    """
-    Validate SSL certificates before starting the server.
-
-    Checks:
-    - Certificate and key files exist
-    - Certificate is not expired
-    - Certificate and key match
-    - Files are readable
-
-    :param cert_path: Path to certificate file
-    :param key_path: Path to private key file
-    :return: Dict with validation results
-    :raises SystemExit: If validation fails critically
-    """
-    import subprocess
-    from datetime import datetime
-
-    results = {
-        "valid": True,
-        "warnings": [],
-        "errors": []
-    }
-
-    # Check if files exist
-    cert_file = Path(cert_path)
-    key_file = Path(key_path)
-
-    if not cert_file.exists():
-        results["errors"].append(f"Certificate file not found: {cert_path}")
-        results["valid"] = False
-
-    if not key_file.exists():
-        results["errors"].append(f"Private key file not found: {key_path}")
-        results["valid"] = False
-
-    if not results["valid"]:
-        return results
-
-    # Check if files are readable
-    try:
-        with open(cert_path, 'r') as f:
-            f.read(1)
-    except Exception as e:
-        results["errors"].append(f"Cannot read certificate file: {e}")
-        results["valid"] = False
-
-    try:
-        with open(key_path, 'r') as f:
-            f.read(1)
-    except Exception as e:
-        results["errors"].append(f"Cannot read private key file: {e}")
-        results["valid"] = False
-
-    if not results["valid"]:
-        return results
-
-    # Validate certificate expiry
-    try:
-        cmd = ["openssl", "x509", "-in", cert_path, "-noout", "-enddate"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        expiry_str = result.stdout.strip().replace("notAfter=", "")
-        expiry_date = datetime.strptime(expiry_str, "%b %d %H:%M:%S %Y %Z")
-
-        days_until_expiry = (expiry_date - datetime.now()).days
-
-        if days_until_expiry < 0:
-            results["errors"].append(f"Certificate EXPIRED {abs(days_until_expiry)} days ago!")
-            results["valid"] = False
-        elif days_until_expiry < 30:
-            results["warnings"].append(f"Certificate expires in {days_until_expiry} days")
-        else:
-            logger.info(f"Certificate valid for {days_until_expiry} days")
-
-    except subprocess.CalledProcessError as e:
-        results["errors"].append(f"Failed to validate certificate expiry: {e}")
-        results["valid"] = False
-    except Exception as e:
-        results["warnings"].append(f"Could not parse certificate expiry date: {e}")
-
-    # Validate private key
-    try:
-        cmd = ["openssl", "rsa", "-in", key_path, "-check", "-noout"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        logger.info("Private key validation: OK")
-    except subprocess.CalledProcessError as e:
-        results["errors"].append(f"Private key validation failed: {e.stderr}")
-        results["valid"] = False
-
-    # Validate certificate and key match
-    try:
-        # Get certificate modulus
-        cmd_cert = ["openssl", "x509", "-noout", "-modulus", "-in", cert_path]
-        cert_result = subprocess.run(cmd_cert, capture_output=True, text=True, check=True)
-        cert_modulus = cert_result.stdout.strip()
-
-        # Get key modulus
-        cmd_key = ["openssl", "rsa", "-noout", "-modulus", "-in", key_path]
-        key_result = subprocess.run(cmd_key, capture_output=True, text=True, check=True)
-        key_modulus = key_result.stdout.strip()
-
-        if cert_modulus != key_modulus:
-            results["errors"].append("Certificate and private key DO NOT MATCH!")
-            results["valid"] = False
-        else:
-            logger.info("Certificate and private key: MATCH")
-
-    except subprocess.CalledProcessError as e:
-        results["errors"].append(f"Failed to verify certificate/key match: {e}")
-        results["valid"] = False
-
-    return results
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Lifespan context manager for startup and shutdown events.
-    Validates SSL certificates on application startup.
-    """
-    import os
-
-    # Startup: Validate SSL certificates
-    cert_path = os.environ.get("SSL_CERTFILE", "./src/certs/cert.pem")
-    key_path = os.environ.get("SSL_KEYFILE", "./src/certs/key.pem")
-
-    # Only validate if both files exist (SSL is being used)
-    if Path(cert_path).exists() and Path(key_path).exists():
-        logger.info("=" * 60)
-        logger.info("Validating SSL certificates on startup...")
-        validation = validate_ssl_certificates(cert_path, key_path)
-
-        # Display warnings
-        for warning in validation["warnings"]:
-            logger.warning(f"⚠️  {warning}")
-
-        # Display errors but don't stop (uvicorn will handle it)
-        if not validation["valid"]:
-            logger.error("SSL CERTIFICATE VALIDATION FAILED!")
-            for error in validation["errors"]:
-                logger.error(f"❌ {error}")
-        else:
-            logger.info("✅ SSL certificates validated successfully")
-
-        logger.info("=" * 60)
-
-    yield
-
-    # Shutdown: cleanup code would go here if needed
-
-
+# FastAPI application
 app = FastAPI(
     title="WarriorFit API",
     description="API for accessing the WarriorFit running event database",
-    version="1.0.1",
-    docs_url = "/docs" ,
-    port = 8550,
+    version=load_version(),
+    docs_url="/docs",
+    port=8550,
     lifespan=lifespan
 )
 app.add_middleware(
@@ -211,77 +53,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": str(await request.body())}
     )
 
-# API Key Security
-config = get_config()
-API_KEY = config.api.secret_key
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-async def verify_api_key(api_key: str = Security(api_key_header)):
-    if api_key != API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or missing API Key"
-        )
-    return api_key
-
-
-async def get_current_user_or_api_key(
-    api_key: str = Security(api_key_header),
-    user: dict = Depends(get_current_user)
-):
-    """
-    Combined authentication: accepts either API Key or OAuth2 token.
-    Tries API key first, falls back to OAuth2 token.
-    """
-    if api_key == API_KEY:
-        return {"type": "api_key", "role": "API_KEY"}
-    # If API key is invalid, check OAuth2 token
-    return {"type": "oauth2", **user}
-
-
-def require_roles(allowed_roles: List[str]):
-    """
-    Dependency factory for role-based access control.
-
-    Only users with specified roles (or API key) can access the endpoint.
-
-    :param allowed_roles: List of allowed role names (e.g., ["PTI", "ADMIN", "APTI"])
-    :return: Dependency function that verifies user role
-    """
-    async def role_checker(auth: dict = Depends(get_current_user_or_api_key)):
-        # API keys bypass role checks
-        if auth.get("type") == "api_key":
-            return auth
-
-        # Check if user is active
-        if not auth.get("is_active", False):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is inactive"
-            )
-
-        # Check user role
-        user_role = auth.get("role")
-        if user_role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required roles: {', '.join(allowed_roles)}"
-            )
-
-        return auth
-
-    return role_checker
-
-
+# Repository
 repo = CrossRepository()
 
+# Define allowed roles for API access
+ALLOWED_ROLES = ["PTI", "ADMIN", "APTI"]
 
-@app.get("/")
+
+@app.get("/", summary="Redirect to API documentation")
 async def root():
+    """Redirect to the interactive API documentation."""
     return RedirectResponse(url="/docs")
 
 
-@app.post("/token", response_model=Token)
+@app.post("/token", response_model=Token, summary="Login and obtain access token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
     OAuth2 compatible token login endpoint.
@@ -303,52 +88,195 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Define allowed roles for API access
-ALLOWED_ROLES = ["PTI", "ADMIN", "APTI"]
 
-@app.get("/crosses", response_model=List[CrossResponse])
+@app.get("/crosses", response_model=List[CrossResponse], summary="Get all crosses")
 async def get_crosses(auth: dict = Depends(require_roles(ALLOWED_ROLES))):
-    """Get all crosses. Requires PTI, ADMIN, or APTI role."""
-    return await repo.get_all_crosses()
+    """Retrieve all crosses from the database. Requires PTI, ADMIN, or APTI role."""
+    try:
+        crosses = await repo.get_all_crosses()
+        if not crosses:
+            logger.info("No crosses found in database")
+        return crosses
+    except Exception as e:
+        logger.error(f"Error fetching crosses: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve crosses"
+        )
 
-@app.get("/crosses/{id_cross}", response_model=CrossResponse)
-async def get_cross(id_cross: int, auth: dict = Depends(require_roles(ALLOWED_ROLES))):
-    """Get a specific cross by ID. Requires PTI, ADMIN, or APTI role."""
-    return await repo.get_cross(id_cross)
+@app.get("/crosses/{id_cross}", response_model=CrossResponse, summary="Get cross by ID")
+async def get_cross(
+    id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
+    auth: dict = Depends(require_roles(ALLOWED_ROLES))
+):
+    """Retrieve a specific cross by its unique identifier. Requires PTI, ADMIN, or APTI role."""
+    try:
+        cross = await repo.get_cross(id_cross)
+        if not cross:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cross with ID {id_cross} not found"
+            )
+        return cross
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching cross {id_cross}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve cross"
+        )
 
-@app.post("/crosses/{serial_number}/{id_cross}")
-async def add_runner(serial_number:str, id_cross:int, auth: dict = Depends(require_roles(ALLOWED_ROLES))):
-    """Add a runner to a cross. Requires PTI, ADMIN, or APTI role."""
-    return await repo.add_runner(serial_number, id_cross)
+@app.post("/crosses/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross by serial number")
+async def add_runner(
+    serial_number: Annotated[str, Path(min_length=1, description="Runner serial number")],
+    id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
+    auth: dict = Depends(require_roles(ALLOWED_ROLES))
+):
+    """Associate a runner with a cross using the runner's serial number. Requires PTI, ADMIN, or APTI role."""
+    if not serial_number.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Serial number cannot be empty"
+        )
 
-@app.get("/crosses/runners/{cross_id}", response_model=List[RunnerResponse])
-async def get_runners(cross_id: int, auth: dict = Depends(require_roles(ALLOWED_ROLES))):
-    """Get all runners for a cross. Requires PTI, ADMIN, or APTI role."""
-    return await repo.get_all_runners(cross_id)
+    try:
+        result = await repo.add_runner(serial_number.strip(), id_cross)
+        logger.info(f"Runner {serial_number} added to cross {id_cross}")
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error adding runner {serial_number} to cross {id_cross}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add runner to cross"
+        )
 
-@app.post("/crosses/runner/{serial_number}/{id_cross}")
-async def add_runner_duplicate(serial_number:str, id_cross:int, auth: dict = Depends(require_roles(ALLOWED_ROLES))):
-    """Add a runner to a cross (duplicate endpoint). Requires PTI, ADMIN, or APTI role."""
-    return await repo.add_runner(serial_number, id_cross)
+@app.get("/crosses/runners/{cross_id}", response_model=List[RunnerResponse], summary="Get all runners for a cross")
+async def get_runners(
+    cross_id: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
+    auth: dict = Depends(require_roles(ALLOWED_ROLES))
+):
+    """Retrieve all runners associated with a specific cross. Requires PTI, ADMIN, or APTI role."""
+    try:
+        runners = await repo.get_all_runners(cross_id)
+        if not runners:
+            logger.info(f"No runners found for cross {cross_id}")
+        return runners
+    except Exception as e:
+        logger.error(f"Error fetching runners for cross {cross_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve runners"
+        )
 
-@app.post("/crosses/{cross_id}")
-async def save_cross_recordings(cross_id: int, recordings: List[RunnerCreate], auth: dict = Depends(require_roles(ALLOWED_ROLES))):
-    """Save cross recordings. Requires PTI, ADMIN, or APTI role."""
+@app.post("/crosses/runner/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross (alternate endpoint)")
+async def add_runner_duplicate(
+    serial_number: Annotated[str, Path(min_length=1, description="Runner serial number")],
+    id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
+    auth: dict = Depends(require_roles(ALLOWED_ROLES))
+):
+    """
+    Add runner to a cross using an alternate endpoint.
+
+    This function provides functionality to associate a runner with a cross. The runner
+    is identified by their serial number, and the cross is identified by its ID. The request
+    requires authorization based on specific roles.
+
+    :param serial_number: The serial number of the runner. The serial number cannot be an
+        empty string.
+    :param id_cross: The unique identifier of the cross. It must be a positive integer.
+    :param auth: Dictionary containing authentication information; provided automatically
+        via dependency injection.
+    :return: A dictionary or object containing the result of the operation, such as
+        confirmation of the runner being added to the cross.
+    :raises HTTPException: Raised if the serial number is empty, if the operation fails
+        due to a bad request, or if an unexpected error occurs during the process.
+    """
+    if not serial_number.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Serial number cannot be empty"
+        )
+
+    try:
+        result = await repo.add_runner(serial_number.strip(), id_cross)
+        logger.info(f"Runner {serial_number} added to cross {id_cross}")
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error adding runner {serial_number} to cross {id_cross}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add runner to cross"
+        )
+
+@app.post("/crosses/{cross_id}", status_code=status.HTTP_201_CREATED, summary="Save multiple runner recordings for a cross")
+async def save_cross_recordings(
+    cross_id: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
+    recordings: List[RunnerCreate],
+    auth: dict = Depends(require_roles(ALLOWED_ROLES))
+):
+    """Save multiple runner recordings with times for a specific cross. Requires PTI, ADMIN, or APTI role."""
+
+    if not recordings:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recordings list cannot be empty"
+        )
+
     logger.info(f"Received POST request to /crosses/{cross_id}")
     logger.info(f"Number of recordings: {len(recordings)}")
-    logger.info(f"Recordings data: {recordings}")
 
-    runners: List[Runner] = []
-    for recording in recordings:
-        runners.append(Runner(running_time=recording.running_time, serial_number=recording.serial_number))
+    try:
+        runners: List[Runner] = []
+        for idx, recording in enumerate(recordings):
+            if not recording.serial_number or not recording.serial_number.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Recording at index {idx}: Serial number cannot be empty"
+                )
+            if recording.running_time is None or recording.running_time < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Recording at index {idx}: Running time must be a non-negative number"
+                )
+            runners.append(Runner(
+                running_time=recording.running_time,
+                serial_number=recording.serial_number.strip()
+            ))
 
-    return await repo.save_recordings(cross_id, runners)
+        result = await repo.save_recordings(cross_id, runners)
+        logger.info(f"Successfully saved {len(runners)} recordings for cross {cross_id}")
+        return result
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error saving recordings for cross {cross_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save cross recordings"
+        )
 
 
 if __name__ == "__main__":
     import uvicorn
     import sys
-    import os
+    from pathlib import Path
+    from src.core.ssl_validator import validate_ssl_certificates
 
     # Get the project root directory (parent of src/)
     project_root = Path(__file__).parent.parent.absolute()
