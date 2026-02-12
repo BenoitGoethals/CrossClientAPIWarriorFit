@@ -221,7 +221,7 @@ async def add_runner_duplicate(
 
 @app.post("/crosses/{cross_id}", status_code=status.HTTP_201_CREATED, summary="Save multiple runner recordings for a cross")
 async def save_cross_recordings(
-    cross_id: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
+    cross_id: Annotated[int, Path(gt=-1, description="Cross ID must be a positive integer")],
     recordings: List[RunnerCreate],
     auth: dict = Depends(require_roles(ALLOWED_ROLES))
 ):
