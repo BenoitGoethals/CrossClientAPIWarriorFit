@@ -239,11 +239,7 @@ async def save_cross_recordings(
     try:
         runners: List[Runner] = []
         for idx, recording in enumerate(recordings):
-            if not recording.serial_number or not recording.serial_number.strip():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Recording at index {idx}: Serial number cannot be empty"
-                )
+
             if recording.running_time is None or recording.running_time < 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -251,7 +247,7 @@ async def save_cross_recordings(
                 )
             runners.append(Runner(
                 running_time=recording.running_time,
-                serial_number=recording.serial_number.strip()
+                serial_number=None
             ))
 
         result = await repo.save_recordings(cross_id, runners)
