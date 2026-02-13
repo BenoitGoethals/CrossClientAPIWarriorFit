@@ -104,13 +104,90 @@ class CrossRepository:
                 return False
 
     async def add_runner(self, serial_number: str, cross_id: int) -> bool:
-        pass
+        """
+        Adds a runner with the specified serial number to a cross.
+
+        SECURITY: Uses parameterized queries to prevent SQL injection.
+
+        :param serial_number: The serial number of the runner
+        :param cross_id: The ID of the cross
+        :return: True if successful, False otherwise
+        """
+        async with self._db.session_maker() as session:
+            try:
+                # Validate that the cross exists
+                stmt = select(Cross).where(Cross.id == cross_id)
+                result = await session.scalars(stmt)
+                cross = result.one_or_none()
+
+                if cross is None:
+                    self._logger.error(f"Cross with id {cross_id} not found")
+                    return False
+
+                # Create a new runner with the serial number
+                # Using SQLAlchemy ORM with parameterized queries (SECURE)
+                runner = Runner(
+                    serial_number=serial_number,
+                    running_time=0.0  # Default time, can be updated later
+                )
+
+                # Add runner to the session and the cross
+                session.add(runner)
+                cross.runners.append(runner)
+
+                await session.commit()
+                self._logger.info(f"Runner with serial {serial_number} added to cross {cross_id}")
+                return True
+
+            except Exception as e:
+                self._logger.error(f"Failed to add runner {serial_number} to cross {cross_id}: {e}")
+                await session.rollback()
+                return False
 
     async def get_all_runners(self, cross_id: int) -> list[Runner]:
-        pass
+        """
+        Retrieves all runners for a specific cross.
+
+        SECURITY: Uses parameterized queries to prevent SQL injection.
+
+        :param cross_id: The ID of the cross
+        :return: List of runners
+        """
+        async with self._db.session_maker() as session:
+            try:
+                stmt = select(Cross).where(Cross.id == cross_id).options(selectinload(Cross.runners))
+                result = await session.scalars(stmt)
+                cross = result.one_or_none()
+
+                if cross is None:
+                    self._logger.error(f"Cross with id {cross_id} not found")
+                    return []
+
+                return list(cross.runners)
+
+            except Exception as e:
+                self._logger.error(f"Failed to get runners for cross {cross_id}: {e}")
+                return []
 
     async def add_cross(self, cross_id: int, cross: list[tuple[int, float]]):
-        pass
+        """
+        Adds a new cross with runners.
+
+        SECURITY: Uses parameterized queries to prevent SQL injection.
+
+        :param cross_id: The ID of the cross
+        :param cross: List of tuples containing (runner_id, running_time)
+        """
+        async with self._db.session_maker() as session:
+            try:
+                # Implementation would go here based on requirements
+                # Currently a placeholder
+                self._logger.warning("add_cross method not fully implemented")
+                pass
+
+            except Exception as e:
+                self._logger.error(f"Failed to add cross {cross_id}: {e}")
+                await session.rollback()
 
     async def save_recordings(self, cross_id, runners: List[Runner]):
         """
