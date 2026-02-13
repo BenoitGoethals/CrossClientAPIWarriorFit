@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+auth_logger = logging.getLogger("auth")
 
 
 def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
@@ -35,12 +35,17 @@ def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
     if not cert_file.exists():
         results["errors"].append(f"Certificate file not found: {cert_path}")
         results["valid"] = False
+        auth_logger.error(f"Certificate file not found: {cert_path}")
+
+
 
     if not key_file.exists():
         results["errors"].append(f"Private key file not found: {key_path}")
         results["valid"] = False
+        auth_logger.error(f"Private key file not found: {key_path}")
 
     if not results["valid"]:
+        auth_logger.error("SSL CERTIFICATE VALIDATION FAILED!")
         return results
 
     # Check if files are readable
@@ -48,6 +53,7 @@ def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
         with open(cert_path, 'r') as f:
             f.read(1)
     except Exception as e:
+        auth_logger.error(f"Cannot read certificate file: {e}")
         results["errors"].append(f"Cannot read certificate file: {e}")
         results["valid"] = False
 
@@ -55,6 +61,7 @@ def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
         with open(key_path, 'r') as f:
             f.read(1)
     except Exception as e:
+        auth_logger.error(f"Cannot read private key file: {e}")
         results["errors"].append(f"Cannot read private key file: {e}")
         results["valid"] = False
 
@@ -73,25 +80,29 @@ def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
         if days_until_expiry < 0:
             results["errors"].append(f"Certificate EXPIRED {abs(days_until_expiry)} days ago!")
             results["valid"] = False
+            auth_logger.error(f"Certificate EXPIRED {abs(days_until_expiry)} days ago!")
         elif days_until_expiry < 30:
             results["warnings"].append(f"Certificate expires in {days_until_expiry} days")
         else:
-            logger.info(f"Certificate valid for {days_until_expiry} days")
+            auth_logger.info(f"Certificate valid for {days_until_expiry} days")
 
     except subprocess.CalledProcessError as e:
         results["errors"].append(f"Failed to validate certificate expiry: {e}")
         results["valid"] = False
+        auth_logger.error(f"Failed to validate certificate expiry: {e}")
     except Exception as e:
         results["warnings"].append(f"Could not parse certificate expiry date: {e}")
+        auth_logger.warning(f"Could not parse certificate expiry date: {e}")
 
     # Validate private key
     try:
         cmd = ["openssl", "rsa", "-in", key_path, "-check", "-noout"]
         key_validation_result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        logger.info("Private key validation: OK")
+        auth_logger.info("Private key validation: OK")
     except subprocess.CalledProcessError as e:
         results["errors"].append(f"Private key validation failed: {e.stderr}")
         results["valid"] = False
+        auth_logger.error(f"Private key validation failed: {e.stderr}")
 
     # Validate certificate and key match
     try:
@@ -108,11 +119,13 @@ def validate_ssl_certificates(cert_path: str, key_path: str) -> dict:
         if cert_modulus != key_modulus:
             results["errors"].append("Certificate and private key DO NOT MATCH!")
             results["valid"] = False
+            auth_logger.error("Certificate and private key: DO NOT MATCH!")
         else:
-            logger.info("Certificate and private key: MATCH")
+            auth_logger.info("Certificate and private key: MATCH")
 
     except subprocess.CalledProcessError as e:
         results["errors"].append(f"Failed to verify certificate/key match: {e}")
         results["valid"] = False
+        auth_logger.error(f"Failed to verify certificate/key match: {e}")
 
     return results

@@ -18,13 +18,14 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# Setup logging
-setup_logging()
-logger = logging.getLogger(__name__)
-
-# Configuration
+# Configuration (load first so logging can use mail config)
 config = get_config()
+
+setup_logging(config.mail)
+logger = logging.getLogger(__name__)
+auth_logger = logging.getLogger("auth")
 
 # FastAPI application
 app = FastAPI(
@@ -43,15 +44,54 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+class AuthFailureAuditMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        # Skip noisy public endpoints
+        public_paths = {"/", "/docs", "/openapi.json", "/redoc"}
+        path = request.url.path
+
+        if path not in public_paths and response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+            client_host = request.client.host if request.client else "<unknown>"
+            auth_logger.warning(
+                "Auth failed: status=%s method=%s path=%s client=%s",
+                response.status_code,
+                request.method,
+                path,
+                client_host,
+            )
+
+        return response
+
+app.add_middleware(AuthFailureAuditMiddleware)
+
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error("Validation error for %s %s", request.method, request.url)
-    logger.error("Request body: %s", await request.body())
-    logger.error("Validation errors: %s", exc.errors())
+
+    cached = getattr(request.state, "cached_body", b"")
+    # Keep logs safe + readable (don’t crash on decoding issues, don’t dump huge bodies)
+    body_preview = cached[:4096].decode("utf-8", errors="replace") if cached else ""
+
+    # Auth-related validation errors (e.g. malformed /token requests) should go to auth_logger
+    if request.url.path == "/token":
+        auth_logger.warning(
+            "Auth request validation error for %s %s | errors=%s | body_preview=%s",
+            request.method,
+            request.url,
+            exc.errors(),
+            body_preview,
+        )
+    else:
+        logger.error("Validation error for %s %s", request.method, request.url)
+        logger.error("Request body (preview): %s", body_preview)
+        logger.error("Validation errors: %s", exc.errors())
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": exc.errors(), "body": str(await request.body())}
+        content={"detail": exc.errors(), "body": body_preview},
     )
 
 # Repository
@@ -75,7 +115,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     Returns a JWT access token for authenticated users.
     """
     username = await authenticate_user(form_data.username, form_data.password)
+
     if not username:
+        auth_logger.warning(f"Invalid login attempt for user: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

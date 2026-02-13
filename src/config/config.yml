@@ -11,3 +11,14 @@ api:
   oauth2_secret_key: warriorfit_oauth2_jwt_secret_key_change_in_production
   algorithm: HS256
   access_token_expire_minutes: 30
+
+
+mail:
+  host: 192.168.0.174
+  password: R@nger&1401!
+  port: 25
+  sender: null
+  sender_email: benoit@albatros.be
+  use_ssl: false
+  use_tls: false
+  username: benoit

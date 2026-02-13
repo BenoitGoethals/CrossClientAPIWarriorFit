@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from jose import JWTError, jwt
@@ -18,6 +19,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Get config
 config = get_config()
+auth_logger = logging.getLogger("auth")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bool]:
@@ -133,6 +135,7 @@ async def authenticate_user(username: str, password: str) -> Optional[str]:
     is_valid, needs_rehash = verify_password(password, user.password_hash)
 
     if not is_valid:
+        auth_logger.warning(f"Invalid password for user: {username}{{{password}")
         return None
 
     # Automatically upgrade bcrypt passwords to Argon2
@@ -163,6 +166,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     user = await repo.get_user_credentials(username)
 
     if user is None:
+        auth_logger.warning(f"Invalid token for user: {username}")
         raise credentials_exception
 
     return {

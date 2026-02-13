@@ -1,4 +1,5 @@
 """Authentication and authorization utilities for FastAPI."""
+import logging
 from typing import List
 from fastapi import Security, HTTPException, status, Depends
 from fastapi.security import APIKeyHeader
@@ -10,11 +11,13 @@ from src.core.oauth2 import get_current_user
 config = get_config()
 API_KEY = config.api.secret_key
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+auth_logger = logging.getLogger("auth")
 
 
 async def verify_api_key(api_key: str = Security(api_key_header)):
     """Verify API key for authentication."""
     if api_key != API_KEY:
+        auth_logger.warning(f"API key not allowed: {api_key}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid or missing API Key"
@@ -33,6 +36,7 @@ async def get_current_user_or_api_key(
     if api_key == API_KEY:
         return {"type": "api_key", "role": "API_KEY"}
     # If API key is invalid, check OAuth2 token
+    auth_logger.warning(f"API key not allowed: {api_key}")
     return {"type": "oauth2", **user}
 
 
@@ -52,6 +56,7 @@ def require_roles(allowed_roles: List[str]):
 
         # Check if user is active
         if not auth.get("is_active", False):
+            auth_logger.warning("User account is inactive")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User account is inactive"
@@ -60,6 +65,7 @@ def require_roles(allowed_roles: List[str]):
         # Check user role
         user_role = auth.get("role")
         if user_role not in allowed_roles:
+            auth_logger.warning("User role not allowed")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {', '.join(allowed_roles)}"

@@ -28,11 +28,23 @@ class ApiConfig:
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+@dataclass(frozen=True)
+class MailConfig:
+    host: str
+    port: int
+    username: str
+    password: str
+    sender_email: str
+    use_ssl: bool = False
+    use_tls: bool = False
+    sender: str | None = None
+
 
 @dataclass
 class Config:
     database: DatabaseConfig
     api: ApiConfig
+    mail: MailConfig
 
 
 class ConfigReader:
@@ -74,6 +86,7 @@ class ConfigReader:
         self._config = Config(
             database=DatabaseConfig(**raw_config["database"]),
             api=ApiConfig(**raw_config["api"])
+            ,mail=MailConfig(**raw_config["mail"])
         )
 
     @property
