@@ -2,6 +2,7 @@ import logging
 from typing import Any, List
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from src.core.db_connection import DatabaseConnection
 from src.data.model.db_model import Cross, Runner, User
@@ -43,8 +44,8 @@ class CrossRepository:
             try:
                 result = await session.scalars(stmt)
                 return result.all()
-            except Exception as e:
-                self._logger.error(e)
+            except SQLAlchemyError as e:
+                self._logger.error("Database error fetching crosses: %s", e)
                 return None
 
     async def get_cross(self, id_cross: int) -> Cross | None:
@@ -65,8 +66,8 @@ class CrossRepository:
             try:
                 result = await session.scalars(stmt)
                 return result.one_or_none()
-            except Exception as e:
-                self._logger.error(e)
+            except SQLAlchemyError as e:
+                self._logger.error("Database error fetching cross %s: %s", id_cross, e)
                 return None
 
     async def get_user_credentials(self,username:str)->User|None:
@@ -75,8 +76,8 @@ class CrossRepository:
             try:
                 result = await session.scalars(stmt)
                 return result.one_or_none()
-            except Exception as e:
-                self._logger.error(e)
+            except SQLAlchemyError as e:
+                self._logger.error("Database error fetching user credentials for %s: %s", username, e)
                 return None
 
     async def update_password_hash(self, username: str, new_hash: str) -> bool:
@@ -93,14 +94,15 @@ class CrossRepository:
                 result = await session.scalars(stmt)
                 user = result.one_or_none()
                 if user is None:
-                    self._logger.error(f"User {username} not found for password update")
+                    self._logger.error("User %s not found for password update", username)
                     return False
                 user.password_hash = new_hash
                 await session.commit()
-                self._logger.info(f"Password hash upgraded to Argon2 for user: {username}")
+                self._logger.info("Password hash upgraded to Argon2 for user: %s", username)
                 return True
-            except Exception as e:
-                self._logger.error(f"Failed to update password hash for {username}: {e}")
+            except SQLAlchemyError as e:
+                self._logger.error("Database error updating password hash for %s: %s", username, e)
+                await session.rollback()
                 return False
 
     async def add_runner(self, serial_number: str, cross_id: int) -> bool:
@@ -121,7 +123,7 @@ class CrossRepository:
                 cross = result.one_or_none()
 
                 if cross is None:
-                    self._logger.error(f"Cross with id {cross_id} not found")
+                    self._logger.error("Cross with id %s not found", cross_id)
                     return False
 
                 # Create a new runner with the serial number
@@ -136,11 +138,15 @@ class CrossRepository:
                 cross.runners.append(runner)
 
                 await session.commit()
-                self._logger.info(f"Runner with serial {serial_number} added to cross {cross_id}")
+                self._logger.info("Runner with serial %s added to cross %s", serial_number, cross_id)
                 return True
 
-            except Exception as e:
-                self._logger.error(f"Failed to add runner {serial_number} to cross {cross_id}: {e}")
+            except IntegrityError as e:
+                self._logger.error("Integrity constraint violated adding runner %s to cross %s: %s", serial_number, cross_id, e)
+                await session.rollback()
+                return False
+            except SQLAlchemyError as e:
+                self._logger.error("Database error adding runner %s to cross %s: %s", serial_number, cross_id, e)
                 await session.rollback()
                 return False
 
@@ -160,13 +166,13 @@ class CrossRepository:
                 cross = result.one_or_none()
 
                 if cross is None:
-                    self._logger.error(f"Cross with id {cross_id} not found")
+                    self._logger.error("Cross with id %s not found", cross_id)
                     return []
 
                 return list(cross.runners)
 
-            except Exception as e:
-                self._logger.error(f"Failed to get runners for cross {cross_id}: {e}")
+            except SQLAlchemyError as e:
+                self._logger.error("Database error fetching runners for cross %s: %s", cross_id, e)
                 return []
 
     async def add_cross(self, cross_id: int, cross: list[tuple[int, float]]):
@@ -185,8 +191,8 @@ class CrossRepository:
                 self._logger.warning("add_cross method not fully implemented")
                 pass
 
-            except Exception as e:
-                self._logger.error(f"Failed to add cross {cross_id}: {e}")
+            except SQLAlchemyError as e:
+                self._logger.error("Database error adding cross %s: %s", cross_id, e)
                 await session.rollback()
 
     async def save_recordings(self, cross_id, runners: List[Runner]):
@@ -206,13 +212,13 @@ class CrossRepository:
                 result = await session.scalars(stmt)
                 cross = result.one_or_none()
                 if cross is None:
-                    self._logger.error(f"Cross with id {cross_id} not found")
+                    self._logger.error("Cross with id %s not found", cross_id)
                     return
                 for runner in runners:
                     cross.runners.append(runner)
                 cross.executed = True
                 await session.commit()
-            except Exception as e:
-
-                self._logger.error(e)
+            except SQLAlchemyError as e:
+                self._logger.error("Database error saving recordings for cross %s: %s", cross_id, e)
+                await session.rollback()
                 return

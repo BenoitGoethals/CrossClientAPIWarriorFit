@@ -3,6 +3,7 @@ import logging
 from typing import List, Annotated
 from datetime import timedelta
 from starlette.responses import RedirectResponse
+from sqlalchemy.exc import SQLAlchemyError
 from src.data.model.db_model import Runner
 from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
 from src.data.repo.cross_repository import CrossRepository
@@ -45,9 +46,9 @@ app.add_middleware(
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.error(f"Validation error for {request.method} {request.url}")
-    logger.error(f"Request body: {await request.body()}")
-    logger.error(f"Validation errors: {exc.errors()}")
+    logger.error("Validation error for %s %s", request.method, request.url)
+    logger.error("Request body: %s", await request.body())
+    logger.error("Validation errors: %s", exc.errors())
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": exc.errors(), "body": str(await request.body())}
@@ -97,8 +98,8 @@ async def get_crosses(auth: dict = Depends(require_roles(ALLOWED_ROLES))):
         if not crosses:
             logger.info("No crosses found in database")
         return crosses
-    except Exception as e:
-        logger.error(f"Error fetching crosses: {str(e)}", exc_info=True)
+    except SQLAlchemyError as e:
+        logger.error("Database error fetching crosses: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve crosses"
@@ -120,8 +121,8 @@ async def get_cross(
         return cross
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error fetching cross {id_cross}: {str(e)}", exc_info=True)
+    except SQLAlchemyError as e:
+        logger.error("Database error fetching cross %s: %s", id_cross, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve cross"
@@ -129,28 +130,38 @@ async def get_cross(
 
 @app.post("/crosses/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross by serial number")
 async def add_runner(
-    serial_number: Annotated[str, Path(min_length=1, description="Runner serial number")],
+    serial_number: Annotated[str, Path(min_length=1, max_length=10, description="Runner serial number")],
     id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
     auth: dict = Depends(require_roles(ALLOWED_ROLES))
 ):
     """Associate a runner with a cross using the runner's serial number. Requires PTI, ADMIN, or APTI role."""
-    if not serial_number.strip():
+    # SECURITY: Validate and sanitize serial_number
+    serial_number_clean = serial_number.strip()
+
+    if not serial_number_clean:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Serial number cannot be empty"
         )
 
+    # SECURITY: Additional validation - only allow alphanumeric and basic characters
+    if not serial_number_clean.replace('-', '').replace('_', '').isalnum():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Serial number contains invalid characters"
+        )
+
     try:
-        result = await repo.add_runner(serial_number.strip(), id_cross)
-        logger.info(f"Runner {serial_number} added to cross {id_cross}")
+        result = await repo.add_runner(serial_number_clean, id_cross)
+        logger.info("Runner %s added to cross %s", serial_number_clean, id_cross)
         return result
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
-        logger.error(f"Error adding runner {serial_number} to cross {id_cross}: {str(e)}", exc_info=True)
+    except SQLAlchemyError as e:
+        logger.error("Database error adding runner %s to cross %s: %s", serial_number_clean, id_cross, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add runner to cross"
@@ -165,10 +176,10 @@ async def get_runners(
     try:
         runners = await repo.get_all_runners(cross_id)
         if not runners:
-            logger.info(f"No runners found for cross {cross_id}")
+            logger.info("No runners found for cross %s", cross_id)
         return runners
-    except Exception as e:
-        logger.error(f"Error fetching runners for cross {cross_id}: {str(e)}", exc_info=True)
+    except SQLAlchemyError as e:
+        logger.error("Database error fetching runners for cross %s: %s", cross_id, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve runners"
@@ -176,7 +187,7 @@ async def get_runners(
 
 @app.post("/crosses/runner/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross (alternate endpoint)")
 async def add_runner_duplicate(
-    serial_number: Annotated[str, Path(min_length=1, description="Runner serial number")],
+    serial_number: Annotated[str, Path(min_length=1, max_length=10, description="Runner serial number")],
     id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
     auth: dict = Depends(require_roles(ALLOWED_ROLES))
 ):
@@ -197,23 +208,33 @@ async def add_runner_duplicate(
     :raises HTTPException: Raised if the serial number is empty, if the operation fails
         due to a bad request, or if an unexpected error occurs during the process.
     """
-    if not serial_number.strip():
+    # SECURITY: Validate and sanitize serial_number
+    serial_number_clean = serial_number.strip()
+
+    if not serial_number_clean:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Serial number cannot be empty"
         )
 
+    # SECURITY: Additional validation - only allow alphanumeric and basic characters
+    if not serial_number_clean.replace('-', '').replace('_', '').isalnum():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Serial number contains invalid characters"
+        )
+
     try:
-        result = await repo.add_runner(serial_number.strip(), id_cross)
-        logger.info(f"Runner {serial_number} added to cross {id_cross}")
+        result = await repo.add_runner(serial_number_clean, id_cross)
+        logger.info("Runner %s added to cross %s", serial_number_clean, id_cross)
         return result
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
-        logger.error(f"Error adding runner {serial_number} to cross {id_cross}: {str(e)}", exc_info=True)
+    except SQLAlchemyError as e:
+        logger.error("Database error adding runner %s to cross %s: %s", serial_number_clean, id_cross, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add runner to cross"
@@ -233,8 +254,8 @@ async def save_cross_recordings(
             detail="Recordings list cannot be empty"
         )
 
-    logger.info(f"Received POST request to /crosses/{cross_id}")
-    logger.info(f"Number of recordings: {len(recordings)}")
+    logger.info("Received POST request to /crosses/%s", cross_id)
+    logger.info("Number of recordings: %s", len(recordings))
 
     try:
         runners: List[Runner] = []
@@ -251,7 +272,7 @@ async def save_cross_recordings(
             ))
 
         result = await repo.save_recordings(cross_id, runners)
-        logger.info(f"Successfully saved {len(runners)} recordings for cross {cross_id}")
+        logger.info("Successfully saved %s recordings for cross %s", len(runners), cross_id)
         return result
     except HTTPException:
         raise
@@ -260,8 +281,8 @@ async def save_cross_recordings(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
-        logger.error(f"Error saving recordings for cross {cross_id}: {str(e)}", exc_info=True)
+    except SQLAlchemyError as e:
+        logger.error("Database error saving recordings for cross %s: %s", cross_id, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save cross recordings"
@@ -281,7 +302,7 @@ if __name__ == "__main__":
     cert_path = project_root / "src" / "certs" / "cert.pem"
     key_path = project_root / "src" / "certs" / "key.pem"
 
-    logger.info(f"Looking for certificates at: {cert_path}")
+    logger.info("Looking for certificates at: %s", cert_path)
 
     # Validate SSL certificates before starting
     logger.info("=" * 60)
