@@ -14,10 +14,10 @@ api:
 
 
 mail:
-  host: 192.168.0.174
+  host: 192.168.0.30
   password: R@nger&1401!
-  port: 25
-  sender: null
+  port: 1025
+  sender: noreplay.benoit@albatros.be
   sender_email: benoit@albatros.be
   use_ssl: false
   use_tls: false
