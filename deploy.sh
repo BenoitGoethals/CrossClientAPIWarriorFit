@@ -50,7 +50,7 @@ sudo docker run -d \
     -p "${PORT}:${PORT}" \
     --restart unless-stopped \
     -e APP_ENV=docker \
-    -v /home/benoit/path/to/config.yml:/etc/CrossClientAPI/config.yml \
+    -v /home/benoit/path/to/config.yml:/etc/CrossClientAPI \
     "${IMAGE_NAME}"
 
 echo ""
