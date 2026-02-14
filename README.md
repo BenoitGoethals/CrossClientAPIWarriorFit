@@ -586,21 +586,28 @@ CrossClientAPIWarriorFit/
 │   ├── config/
 │   │   └── config.yml         # Application configuration
 │   ├── core/
+│   │   ├── auth.py            # Authentication utilities
 │   │   ├── config_reader.py   # Configuration loader
 │   │   ├── db_connection.py   # Database connection
-│   │   └── oauth2.py          # Authentication & Argon2id hashing
-│   ├── model/
-│   │   ├── db_model.py        # SQLAlchemy models
-│   │   ├── schemas.py         # Pydantic schemas
-│   │   └── role.py            # User roles enum
-│   └── repo/
-│       └── cross_repository.py # Database operations
+│   │   ├── lifespan.py        # Application lifespan context manager
+│   │   ├── logging_config.py  # Logging configuration
+│   │   ├── oauth2.py          # OAuth2 & Argon2id hashing
+│   │   ├── ssl_validator.py   # SSL certificate validation
+│   │   └── version_loader.py  # Dynamic version loading from version.yaml
+│   └── data/
+│       ├── model/
+│       │   ├── db_model.py    # SQLAlchemy models
+│       │   ├── schemas.py     # Pydantic schemas
+│       │   └── role.py        # User roles enum
+│       └── repo/
+│           └── cross_repository.py # Database operations (crosses, runners)
 ├── test_api_client.py          # Python test client (httpx)
 ├── test_api.sh                 # Bash test script (curl)
 ├── README_API_CLIENT.md        # Test client documentation
 ├── Dockerfile                  # Container configuration
 ├── pyproject.toml             # Python dependencies
 ├── uv.lock                    # Locked dependency versions
+├── version.yaml               # Application version file
 └── README.md                  # This file
 ```
 
@@ -697,6 +704,10 @@ psql -h localhost -U your_user -d warriorfit_test
 ### [Unreleased]
 
 #### Added
+- **Runner Management** (2026-02-13)
+  - Implemented `add_runner`, `get_all_runners`, and placeholder `add_cross` methods in `cross_repository`
+  - Added parameterized query security for runner operations
+
 - **Version Management System** (2026-02-11)
   - Added `version_loader` utility to dynamically load application version from `version.yaml`
   - Improved `version_loader` with multi-path search for `version.yaml` and enhanced error logging
@@ -704,6 +715,19 @@ psql -h localhost -U your_user -d warriorfit_test
   - Load application version dynamically using `load_version()` function
 
 #### Changed
+- **Logging & Configuration Updates** (2026-02-13)
+  - Updated logging configuration
+  - Updated application configuration
+
+- **Exception Handling Refactor** (2026-02-13)
+  - Replaced generic `Exception` with specific `SQLAlchemyError` and `IntegrityError` in `cross_repository` and main app for better error logging and handling
+
+- **Recordings Logic Update** (2026-02-12)
+  - Removed serial number validation and defaulted it to `None` in `save_recordings` logic
+
+- **Configuration & Database** (2026-02-12)
+  - Changed database host to local network address in `config.yml`
+
 - **Main Application Refactor** (2026-02-07)
   - Simplified FastAPI application setup in `main.py`
   - Removed unused SSL validation logic
@@ -711,7 +735,14 @@ psql -h localhost -U your_user -d warriorfit_test
   - Enhanced logging throughout the application
   - Added detailed endpoints with improved error handling
 
+#### Fixed
+- **Endpoint Path Fix** (2026-02-12)
+  - Fixed incorrect `Path` constraint for `cross_id` parameter in `/crosses/{cross_id}` endpoint
+
 #### Security Enhancements
+- **Dependency Update** (2026-02-11)
+  - Bumped `cryptography` from 46.0.4 to 46.0.5
+
 - **Authentication & Security** (2026-02-07)
   - Added comprehensive authentication system
   - Implemented SSL validation
@@ -745,4 +776,4 @@ For issues, questions, or contributions, please contact the project maintainer.
 - [Argon2 Specification](https://github.com/P-H-C/phc-winner-argon2)
 
 **Version:** 1.0.0
-**Last Updated:** 2026-02-07
+**Last Updated:** 2026-02-14

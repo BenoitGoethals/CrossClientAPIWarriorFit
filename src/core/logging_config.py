@@ -6,13 +6,14 @@ from pathlib import Path
 from typing import Sequence
 
 
-class _SSLAwareSMTPHandler(SMTPHandler):
-    """SMTPHandler that can optionally use SMTP_SSL and/or STARTTLS based on config."""
+class SmtpHandler(SMTPHandler):
+    """
 
+    """
     def __init__(
         self,
         mailhost: tuple[str, int],
-        fromaddr: str,
+        from_addr: str,
         toaddrs: Sequence[str],
         subject: str,
         credentials: tuple[str, str] | None = None,
@@ -20,7 +21,7 @@ class _SSLAwareSMTPHandler(SMTPHandler):
         use_ssl: bool = False,
         timeout: float = 10.0,
     ):
-        super().__init__(mailhost, fromaddr, list(toaddrs), subject, credentials=credentials, secure=() if use_tls else None)
+        super().__init__(mailhost, from_addr, list(toaddrs), subject, credentials=credentials, secure=() if use_tls else None)
         self._use_tls = use_tls
         self._use_ssl = use_ssl
         self._timeout = timeout
@@ -78,7 +79,7 @@ def setup_logging(mail_config=None):
     # Optional: email alerts for auth warnings/errors
     if mail_config is not None:
         # NOTE: if you want a different recipient, add it to config and use it here.
-        to_addrs = [mail_config.sender_email]
+        to_adders = [mail_config.sender_email]
 
         from_addr = mail_config.sender_email
         if getattr(mail_config, "sender", None):
@@ -88,10 +89,10 @@ def setup_logging(mail_config=None):
         if mail_config.username and mail_config.password:
             credentials = (mail_config.username, mail_config.password)
 
-        mail_handler = _SSLAwareSMTPHandler(
+        mail_handler = SmtpHandler(
             mailhost=(mail_config.host, mail_config.port),
-            fromaddr=from_addr,
-            toaddrs=to_addrs,
+            from_addr=from_addr,
+            toaddrs=to_adders,
             subject="[WarriorFit] Auth warning/error",
             credentials=credentials,
             use_tls=bool(mail_config.use_tls),
