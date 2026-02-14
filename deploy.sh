@@ -1,63 +1,61 @@
 #!/bin/bash
-set -e
 
-# WarriorFit API - Docker Deploy Script
-# Usage: ./deploy.sh
 
-APP_NAME="api-warriorfit-app"
+set -e  # Exit on error
+
+CONTAINER_NAME="api-warriorfit-app"
 IMAGE_NAME="api-warriorfit-app"
-PORT="8555"
-CONFIG_DIR="/home/benoit/PycharmProjects/CrossClientAPIWarriorFit/src/config"
+PORT_MAPPING="8555:8555"
 
-echo "=========================================="
-echo "  WarriorFit API - Deploy"
-echo "=========================================="
-
-# 1. Sync repository from GitHub
+echo "=== Docker Deployment Script ==="
 echo ""
-echo "[1/4] Syncing repository from GitHub..."
-gh repo sync
-git pull
-echo "Repository synced."
 
-# 2. Stop running container
+# 1. List all containers
+echo "Step 1: Listing all containers..."
+docker ps -a
 echo ""
-echo "[2/4] Stopping container '${APP_NAME}'..."
-if sudo docker ps -q -f name="${APP_NAME}" | grep -q .; then
-    sudo docker stop "${APP_NAME}"
+
+# 2. Check if container exists and stop it
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "Step 2: Container '${CONTAINER_NAME}' found. Stopping..."
+    docker stop "${CONTAINER_NAME}" || true
     echo "Container stopped."
 else
-    echo "Container not running, skipping stop."
+    echo "Step 2: Container '${CONTAINER_NAME}' not found. Skipping stop."
 fi
-
-# 3. Remove container
 echo ""
-echo "[3/4] Removing container '${APP_NAME}'..."
-if sudo docker ps -aq -f name="${APP_NAME}" | grep -q .; then
-    sudo docker rm "${APP_NAME}"
+
+# 3. Remove the container if it exists
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "Step 3: Removing container '${CONTAINER_NAME}'..."
+    sudo docker rm "${CONTAINER_NAME}"
     echo "Container removed."
 else
-    echo "Container does not exist, skipping remove."
+    echo "Step 3: Container '${CONTAINER_NAME}' not found. Skipping removal."
 fi
-
-# 4. Build and deploy
 echo ""
-echo "[4/4] Building and deploying..."
+
+# 4. Build the Docker image
+echo "Step 4: Building Docker image '${IMAGE_NAME}'..."
 sudo docker build -t "${IMAGE_NAME}" .
-
-sudo docker run -d \
-    --name "${APP_NAME}" \
-    -p "${PORT}:${PORT}" \
-    --restart unless-stopped \
-    -e APP_ENV=docker \
-    -v /home/benoit/path/to/config.yml:/etc/CrossClientAPI \
-    "${IMAGE_NAME}"
-
+echo "Image built successfully."
 echo ""
-echo "=========================================="
-echo "  Deploy complete!"
-echo "  API running on https://localhost:${PORT}"
-echo "=========================================="
 
-# Show container status
-sudo docker ps -f name="${APP_NAME}"
+# 5. Run the new container
+echo "Step 5: Starting new container '${CONTAINER_NAME}'..."
+sudo docker run -d \
+    --restart unless-stopped \
+    --name "${CONTAINER_NAME}" \
+    -v /home/benoit/path/to/config.yml:/etc/CrossClientAPI/config.yml \
+    -p "${PORT_MAPPING}" \
+    "${IMAGE_NAME}"
+echo "Container started successfully."
+echo ""
+
+# 6. Show running containers
+echo "=== Deployment Complete ==="
+echo "Running containers:"
+docker ps | grep "${CONTAINER_NAME}" || echo "Warning: Container not found in running list"
+echo ""
+echo "To view logs: docker logs ${CONTAINER_NAME}"
+echo "To follow logs: docker logs -f ${CONTAINER_NAME}"
