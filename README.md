@@ -11,6 +11,8 @@ A secure **FastAPI** backend application for managing running events with compre
 - [SSL/TLS Certificates](#ssltls-certificates)
 - [Installation](#installation)
 - [API Documentation](#api-documentation)
+- [Endpoint Schema](#endpoint-schema)
+- [Database Schema](#database-schema)
 - [Testing](#testing)
 - [Project Structure](#project-structure)
 
@@ -507,23 +509,182 @@ Once running, access:
 - **Swagger UI**: https://localhost:8555/docs
 - **ReDoc**: https://localhost:8555/redoc
 
-### Available Endpoints
+### Endpoint Schema
 
-#### Authentication
-- `POST /token` - OAuth2 login (get JWT token)
+```
+                         WarriorFit API (FastAPI)
+                        https://localhost:8555
+                ┌────────────────────────────────────┐
+                │           Auth Layer               │
+                │   OAuth2 (JWT) / API Key Header    │
+                │   Roles: PTI | ADMIN | APTI        │
+                └───────────────┬────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────────┐
+        │                       │                           │
+   [No Auth]               [No Auth]                  [Auth Required]
+        │                       │                           │
+   GET /                   POST /token               /crosses/*
+   → redirect               → login                        │
+     /docs                                                  │
+                 ┌──────────────┼──────────┬────────────────┤
+                 │              │          │                 │
+            GET /crosses        │    GET /crosses/     POST /crosses/
+            → all crosses       │    runners/{cross_id} {cross_id}
+                                │    → runners for      → save bulk
+                       GET /crosses/   a cross            recordings
+                       {id_cross}                    (marks executed)
+                       → single cross
+                                │
+               ┌────────────────┴────────────────┐
+               │                                 │
+      POST /crosses/                POST /crosses/runner/
+      {serial}/{id_cross}          {serial}/{id_cross}
+      → add runner                 → add runner
+        to cross                     (alternate route)
+```
 
-#### Crosses
-- `GET /crosses` - Get all crosses
-- `GET /crosses/{id}` - Get specific cross
-- `POST /crosses/{cross_id}` - Save cross recordings
+### Endpoint Reference
 
-#### Runners
-- `GET /crosses/runners/{cross_id}` - Get runners for a cross
-- `POST /crosses/{serial_number}/{id_cross}` - Add runner to cross
+| # | Method | Path | Auth | Description |
+|---|--------|------|------|-------------|
+| 1 | `GET` | `/` | No | Redirect to `/docs` |
+| 2 | `POST` | `/token` | No | OAuth2 login (username/password → JWT token) |
+| 3 | `GET` | `/crosses` | Yes | Get all crosses with their runners |
+| 4 | `GET` | `/crosses/{id_cross}` | Yes | Get a single cross by ID |
+| 5 | `POST` | `/crosses/{serial_number}/{id_cross}` | Yes | Add a runner to a cross |
+| 6 | `GET` | `/crosses/runners/{cross_id}` | Yes | Get all runners for a cross |
+| 7 | `POST` | `/crosses/runner/{serial_number}/{id_cross}` | Yes | Add a runner to a cross (alternate route) |
+| 8 | `POST` | `/crosses/{cross_id}` | Yes | Save bulk runner recordings for a cross |
 
-**All endpoints require authentication** (API Key or OAuth2 token)
+**All authenticated endpoints require** an API Key or OAuth2 token with **PTI, ADMIN, or APTI** role.
 
-**PTI, ADMIN, or APTI role required** for OAuth2 access
+### Endpoint Details
+
+#### `POST /token` — Login
+
+**Request** (`application/x-www-form-urlencoded`):
+```
+username=your_user&password=your_pass
+```
+
+**Response** (`200 OK`):
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer"
+}
+```
+
+#### `GET /crosses` — List All Crosses
+
+**Response** (`200 OK`):
+```json
+[
+  {
+    "id": 1,
+    "datetime_start": "2026-02-07T10:00:00",
+    "distance": 5000.0,
+    "executed": false,
+    "description": "Morning run",
+    "runners": [
+      { "id": 1, "serial_number": "RUNNER001", "running_time": 125.5 }
+    ]
+  }
+]
+```
+
+#### `GET /crosses/{id_cross}` — Get Cross by ID
+
+| Parameter | Type | Location | Description |
+|-----------|------|----------|-------------|
+| `id_cross` | int (>0) | path | Unique cross identifier |
+
+**Response** (`200 OK`): Single cross object (same structure as above).
+
+#### `POST /crosses/{serial_number}/{id_cross}` — Add Runner to Cross
+
+| Parameter | Type | Location | Constraints |
+|-----------|------|----------|-------------|
+| `serial_number` | string | path | 1-10 chars, alphanumeric / `-` / `_` |
+| `id_cross` | int (>0) | path | Must reference an existing cross |
+
+**Response** (`201 Created`): `true`
+
+#### `GET /crosses/runners/{cross_id}` — Get Runners for a Cross
+
+| Parameter | Type | Location | Description |
+|-----------|------|----------|-------------|
+| `cross_id` | int (>0) | path | The cross identifier |
+
+**Response** (`200 OK`):
+```json
+[
+  { "id": 1, "serial_number": "RUNNER001", "running_time": 125.5 },
+  { "id": 2, "serial_number": "RUNNER002", "running_time": 132.3 }
+]
+```
+
+#### `POST /crosses/{cross_id}` — Save Bulk Recordings
+
+| Parameter | Type | Location | Description |
+|-----------|------|----------|-------------|
+| `cross_id` | int (>=0) | path | The cross identifier |
+
+**Request Body**:
+```json
+[
+  { "serial_number": "RUNNER001", "time": 125.5 },
+  { "serial_number": "RUNNER002", "time": 132.3 }
+]
+```
+
+**Side effects**: Creates runner records and marks the cross as `executed = true`.
+
+**Response** (`201 Created`): Result of the save operation.
+
+### Database Schema
+
+```
+┌──────────────────┐       ┌─────────────────┐       ┌──────────────────┐
+│      Cross       │       │  cross_runners  │       │     Runner       │
+├──────────────────┤       ├─────────────────┤       ├──────────────────┤
+│ id (PK)          │──┐    │ cross_id (FK)   │    ┌──│ id (PK)          │
+│ datetime_start   │  └───>│ runner_id (FK)  │<───┘  │ serial_number    │
+│ distance         │       └─────────────────┘       │ running_time     │
+│ executed         │          Many-to-Many           └──────────────────┘
+│ description      │
+└──────────────────┘
+
+┌──────────────────┐
+│      User        │
+├──────────────────┤
+│ id (PK)          │
+│ username         │
+│ email            │
+│ password_hash    │  ← Argon2id (auto-migration from bcrypt)
+│ role (Enum)      │  ← ADMIN, USER, GUEST, PTI, PLANNER, APTI
+│ is_active        │
+│ created_at       │
+└──────────────────┘
+```
+
+### Error Responses
+
+All errors return a standardized JSON format:
+
+```json
+{ "detail": "Error description" }
+```
+
+| Status Code | Meaning |
+|-------------|---------|
+| `400` | Bad Request (invalid input, empty recordings) |
+| `401` | Unauthorized (missing or invalid authentication) |
+| `403` | Forbidden (insufficient role) |
+| `404` | Not Found (resource does not exist) |
+| `422` | Unprocessable Entity (validation error) |
+| `500` | Internal Server Error (database error) |
 
 ---
 
