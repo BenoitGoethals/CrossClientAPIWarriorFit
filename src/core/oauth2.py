@@ -135,7 +135,7 @@ async def authenticate_user(username: str, password: str) -> Optional[str]:
     is_valid, needs_rehash = verify_password(password, user.password_hash)
 
     if not is_valid:
-        auth_logger.warning(f"Invalid password for user: {username}{{{password}")
+        auth_logger.warning("Invalid password for user: %s", username)
         return None
 
     # Automatically upgrade bcrypt passwords to Argon2
