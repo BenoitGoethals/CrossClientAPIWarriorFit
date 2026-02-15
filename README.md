@@ -86,7 +86,7 @@ WarriorFit API is a running event management system that provides secure RESTful
 │             Authorization Layer (RBAC)                      │
 │  • Check user role: PTI, ADMIN, or APTI                    │
 │  • Check user is active                                     │
-│  • API keys bypass role checks                              │
+│  • API keys are assigned ADMIN role                         │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -96,7 +96,7 @@ WarriorFit API is a running event management system that provides secure RESTful
 │  • Database operations                                      │
 └─────────────────────────────────────────────────────────────┘
 ```
-
+Security details audit : [SECURITY](SECURITY.md)
 ---
 
 ## Authentication & Authorization
@@ -111,8 +111,8 @@ The API supports **two authentication methods**:
 
 **How it works:**
 - Static API key in configuration
-- Bypasses all role-based access controls
-- Full access to all endpoints
+- Assigned the `ADMIN` role (subject to RBAC like all users)
+- Invalid API keys are rejected immediately (no fallback to OAuth2)
 
 **Configuration** (`src/config/config.yml`):
 ```yaml
@@ -753,6 +753,7 @@ CrossClientAPIWarriorFit/
 │   │   ├── lifespan.py        # Application lifespan context manager
 │   │   ├── logging_config.py  # Logging configuration
 │   │   ├── oauth2.py          # OAuth2 & Argon2id hashing
+│   │   ├── rate_limiter.py    # Rate limiting configuration (slowapi)
 │   │   ├── ssl_validator.py   # SSL certificate validation
 │   │   └── version_loader.py  # Dynamic version loading from version.yaml
 │   └── data/
@@ -765,6 +766,7 @@ CrossClientAPIWarriorFit/
 ├── test_api_client.py          # Python test client (httpx)
 ├── test_api.sh                 # Bash test script (curl)
 ├── README_API_CLIENT.md        # Test client documentation
+├── deploy.sh                  # Automated Docker deployment script
 ├── Dockerfile                  # Container configuration
 ├── pyproject.toml             # Python dependencies
 ├── uv.lock                    # Locked dependency versions
@@ -865,6 +867,13 @@ psql -h localhost -U your_user -d warriorfit_test
 ### [Unreleased]
 
 #### Added
+- **Deployment Script** (2026-02-14)
+  - Added `deploy.sh` for automated Docker deployment (stop, remove, build, run)
+
+- **Rate Limiting** (2026-02-15)
+  - Added `slowapi` rate limiting with `rate_limiter.py` module
+  - Applied rate limit of 5 requests/minute on `/token` login endpoint
+
 - **Runner Management** (2026-02-13)
   - Implemented `add_runner`, `get_all_runners`, and placeholder `add_cross` methods in `cross_repository`
   - Added parameterized query security for runner operations
@@ -876,6 +885,13 @@ psql -h localhost -U your_user -d warriorfit_test
   - Load application version dynamically using `load_version()` function
 
 #### Changed
+- **Security Refactor** (2026-02-15)
+  - Refactored authentication flow: invalid API keys are now rejected immediately instead of silently falling back to OAuth2
+  - API key authenticated requests are assigned the `ADMIN` role and subject to role checks (no longer bypass RBAC)
+  - Added API key masking in log messages (`_mask_key`) to prevent credential leakage
+  - Fixed password logging vulnerability in `oauth2.py` — plain-text passwords are no longer written to logs
+  - Improved log messages to use `%s` formatting instead of f-strings
+
 - **Logging & Configuration Updates** (2026-02-13)
   - Updated logging configuration
   - Updated application configuration
@@ -936,5 +952,5 @@ For issues, questions, or contributions, please contact the project maintainer.
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Argon2 Specification](https://github.com/P-H-C/phc-winner-argon2)
 
-**Version:** 1.0.0
-**Last Updated:** 2026-02-14
+**Version:** 0.0.21
+**Last Updated:** 2026-02-15
