@@ -2,7 +2,7 @@
 import logging
 from typing import List, Annotated
 from datetime import timedelta
-from starlette.responses import RedirectResponse
+from starlette.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.exc import SQLAlchemyError
 from src.data.model.db_model import Runner
 from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
@@ -36,7 +36,8 @@ app = FastAPI(
     title="WarriorFit API",
     description="API for accessing the WarriorFit running event database",
     version=load_version(),
-    docs_url="/docs",
+    docs_url="/frago",
+    redoc_url="/fragore",
     port=8550,
     lifespan=lifespan
 )
@@ -107,11 +108,145 @@ repo = CrossRepository()
 # Define allowed roles for API access
 ALLOWED_ROLES = ["PTI", "ADMIN", "APTI"]
 
+html_page = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Belgium Cross Team</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-@app.get("/", summary="Redirect to API documentation")
+<style>
+    body {
+        margin:0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: linear-gradient(135deg,#000000,#222);
+        color:white;
+        text-align:center;
+    }
+
+    .hero {
+        padding:80px 20px;
+        background: linear-gradient(90deg, #000000, #ff0000, #ffd000);
+    }
+
+    h1 {
+        font-size:60px;
+        margin:0;
+        letter-spacing:2px;
+    }
+
+    h2 {
+        font-weight:300;
+        margin-top:10px;
+    }
+
+    .section {
+        padding:60px 20px;
+        max-width:900px;
+        margin:auto;
+    }
+
+    .cards {
+        display:flex;
+        flex-wrap:wrap;
+        justify-content:center;
+        gap:25px;
+        margin-top:30px;
+    }
+
+    .card {
+        background:#111;
+        border-radius:15px;
+        padding:25px;
+        width:250px;
+        box-shadow:0 0 20px rgba(255,0,0,0.4);
+    }
+
+    .cta {
+        background:#ff0000;
+        padding:20px 40px;
+        font-size:22px;
+        border-radius:50px;
+        text-decoration:none;
+        color:white;
+        display:inline-block;
+        margin-top:30px;
+        transition:0.3s;
+    }
+
+    .cta:hover {
+        background:#ffd000;
+        color:black;
+    }
+
+    footer {
+        padding:40px;
+        background:#000;
+        font-size:14px;
+        opacity:0.8;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+    <h1>🇧🇪 BELGIUM CROSS TEAM</h1>
+    <h2>Stronger Together • Faster Together • Fearless Together</h2>
+</div>
+
+<div class="section">
+    <h2>Join the Elite Endurance Community</h2>
+    <p>
+        Runners • Hikers • Mountainbikers • Fitness Warriors  
+        We train, compete and push limits together across Belgium.
+    </p>
+
+    <div class="cards">
+        <div class="card">
+            <h3>🏃 Running</h3>
+            <p>Weekly group runs and race preparation programs.</p>
+        </div>
+
+        <div class="card">
+            <h3>🚵 MTB</h3>
+            <p>Trail rides, technical coaching and endurance rides.</p>
+        </div>
+
+        <div class="card">
+            <h3>💪 Strength</h3>
+            <p>Functional fitness and injury prevention sessions.</p>
+        </div>
+    </div>
+
+    <a class="cta" href="mailto:join@belgiumcross.team">
+        JOIN THE TEAM TODAY
+    </a>
+</div>
+
+<div class="section">
+    <h2>Why Join?</h2>
+    <p>
+        ✔ Structured training programs  
+        ✔ Supportive community  
+        ✔ Events & competitions  
+        ✔ All levels welcome  
+    </p>
+</div>
+
+<footer>
+    Belgium Cross Team • Train Hard • Stay Humble • Never Quit
+</footer>
+
+</body>
+</html>
+"""
+
+
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """Redirect to the interactive API documentation."""
-    return RedirectResponse(url="/docs")
+    return html_page
 
 
 @app.post("/token", response_model=Token, summary="Login and obtain access token")
@@ -155,7 +290,7 @@ async def get_crosses(auth: dict = Depends(require_roles(ALLOWED_ROLES))):
             detail="Failed to retrieve crosses"
         )
 
-@app.get("/crosses/{id_cross}", response_model=CrossResponse, summary="Get cross by ID")
+#@app.get("/crosses/{id_cross}", response_model=CrossResponse, summary="Get cross by ID")
 async def get_cross(
     id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
     auth: dict = Depends(require_roles(ALLOWED_ROLES))
@@ -178,7 +313,7 @@ async def get_cross(
             detail="Failed to retrieve cross"
         )
 
-@app.post("/crosses/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross by serial number")
+#@app.post("/crosses/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross by serial number")
 async def add_runner(
     serial_number: Annotated[str, Path(min_length=1, max_length=10, description="Runner serial number")],
     id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
@@ -217,7 +352,7 @@ async def add_runner(
             detail="Failed to add runner to cross"
         )
 
-@app.get("/crosses/runners/{cross_id}", response_model=List[RunnerResponse], summary="Get all runners for a cross")
+#@app.get("/crosses/runners/{cross_id}", response_model=List[RunnerResponse], summary="Get all runners for a cross")
 async def get_runners(
     cross_id: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
     auth: dict = Depends(require_roles(ALLOWED_ROLES))
@@ -235,7 +370,7 @@ async def get_runners(
             detail="Failed to retrieve runners"
         )
 
-@app.post("/crosses/runner/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross (alternate endpoint)")
+#@app.post("/crosses/runner/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross (alternate endpoint)")
 async def add_runner_duplicate(
     serial_number: Annotated[str, Path(min_length=1, max_length=10, description="Runner serial number")],
     id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
