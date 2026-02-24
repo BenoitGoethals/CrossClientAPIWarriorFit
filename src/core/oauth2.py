@@ -8,6 +8,8 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from src.core.config_reader import get_config
+from src.core.dependencies import get_cross_repository
+from src.data.repo.cross_repository import CrossRepository
 
 # Argon2 password hasher with secure defaults
 # Uses Argon2id (hybrid mode combining Argon2i and Argon2d)
@@ -111,7 +113,7 @@ def verify_token(token: str, credentials_exception: HTTPException) -> str:
         raise credentials_exception
 
 
-async def authenticate_user(username: str, password: str) -> Optional[str]:
+async def authenticate_user(username: str, password: str, repo: CrossRepository) -> Optional[str]:
     """
     Authenticate a user using username and password.
 
@@ -122,11 +124,9 @@ async def authenticate_user(username: str, password: str) -> Optional[str]:
 
     :param username: The username to authenticate.
     :param password: The plain-text password to verify.
+    :param repo: The repository used to fetch user credentials.
     :return: The username if authentication succeeds, None otherwise.
     """
-    from src.data.repo.cross_repository import CrossRepository
-
-    repo = CrossRepository()
     user = await repo.get_user_credentials(username)
 
     if user is None:
@@ -146,14 +146,15 @@ async def authenticate_user(username: str, password: str) -> Optional[str]:
     return user.username
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    repo: CrossRepository = Depends(get_cross_repository)
+) -> dict:
     """
     Get the current authenticated user from the token.
 
     Returns a dict with username and role information.
     """
-    from src.data.repo.cross_repository import CrossRepository
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -162,7 +163,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     username = verify_token(token, credentials_exception)
 
     # Fetch user to get role
-    repo = CrossRepository()
     user = await repo.get_user_credentials(username)
 
     if user is None:

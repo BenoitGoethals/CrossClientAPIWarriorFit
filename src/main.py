@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.data.model.db_model import Runner
 from src.data.model.schemas import CrossResponse, RunnerResponse, RunnerCreate, Token
 from src.data.repo.cross_repository import CrossRepository
+from src.core.dependencies import get_cross_repository
 from src.core.config_reader import get_config
 from src.core.logging_config import setup_logging
 from src.core.lifespan import lifespan
@@ -101,9 +102,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": exc.errors(), "body": body_preview},
     )
-
-# Repository
-repo = CrossRepository()
 
 # Define allowed roles for API access
 ALLOWED_ROLES = ["PTI", "ADMIN", "APTI"]
@@ -251,13 +249,17 @@ async def root():
 
 @app.post("/token", response_model=Token, summary="Login and obtain access token")
 @limiter.limit("5/minute")
-async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    repo: CrossRepository = Depends(get_cross_repository)
+):
     """
     OAuth2 compatible token login endpoint.
 
     Returns a JWT access token for authenticated users.
     """
-    username = await authenticate_user(form_data.username, form_data.password)
+    username = await authenticate_user(form_data.username, form_data.password, repo)
 
     if not username:
         auth_logger.warning(f"Invalid login attempt for user: {form_data.username}")
@@ -276,7 +278,10 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
 
 
 @app.get("/crosses", response_model=List[CrossResponse], summary="Get all crosses")
-async def get_crosses(auth: dict = Depends(require_roles(ALLOWED_ROLES))):
+async def get_crosses(
+    auth: dict = Depends(require_roles(ALLOWED_ROLES)),
+    repo: CrossRepository = Depends(get_cross_repository)
+):
     """Retrieve all crosses from the database. Requires PTI, ADMIN, or APTI role."""
     try:
         crosses = await repo.get_all_crosses()
@@ -290,146 +295,13 @@ async def get_crosses(auth: dict = Depends(require_roles(ALLOWED_ROLES))):
             detail="Failed to retrieve crosses"
         )
 
-#@app.get("/crosses/{id_cross}", response_model=CrossResponse, summary="Get cross by ID")
-async def get_cross(
-    id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
-    auth: dict = Depends(require_roles(ALLOWED_ROLES))
-):
-    """Retrieve a specific cross by its unique identifier. Requires PTI, ADMIN, or APTI role."""
-    try:
-        cross = await repo.get_cross(id_cross)
-        if not cross:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cross with ID {id_cross} not found"
-            )
-        return cross
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        logger.error("Database error fetching cross %s: %s", id_cross, e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve cross"
-        )
-
-#@app.post("/crosses/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross by serial number")
-async def add_runner(
-    serial_number: Annotated[str, Path(min_length=1, max_length=10, description="Runner serial number")],
-    id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
-    auth: dict = Depends(require_roles(ALLOWED_ROLES))
-):
-    """Associate a runner with a cross using the runner's serial number. Requires PTI, ADMIN, or APTI role."""
-    # SECURITY: Validate and sanitize serial_number
-    serial_number_clean = serial_number.strip()
-
-    if not serial_number_clean:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Serial number cannot be empty"
-        )
-
-    # SECURITY: Additional validation - only allow alphanumeric and basic characters
-    if not serial_number_clean.replace('-', '').replace('_', '').isalnum():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Serial number contains invalid characters"
-        )
-
-    try:
-        result = await repo.add_runner(serial_number_clean, id_cross)
-        logger.info("Runner %s added to cross %s", serial_number_clean, id_cross)
-        return result
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except SQLAlchemyError as e:
-        logger.error("Database error adding runner %s to cross %s: %s", serial_number_clean, id_cross, e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to add runner to cross"
-        )
-
-#@app.get("/crosses/runners/{cross_id}", response_model=List[RunnerResponse], summary="Get all runners for a cross")
-async def get_runners(
-    cross_id: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
-    auth: dict = Depends(require_roles(ALLOWED_ROLES))
-):
-    """Retrieve all runners associated with a specific cross. Requires PTI, ADMIN, or APTI role."""
-    try:
-        runners = await repo.get_all_runners(cross_id)
-        if not runners:
-            logger.info("No runners found for cross %s", cross_id)
-        return runners
-    except SQLAlchemyError as e:
-        logger.error("Database error fetching runners for cross %s: %s", cross_id, e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve runners"
-        )
-
-#@app.post("/crosses/runner/{serial_number}/{id_cross}", status_code=status.HTTP_201_CREATED, summary="Add runner to cross (alternate endpoint)")
-async def add_runner_duplicate(
-    serial_number: Annotated[str, Path(min_length=1, max_length=10, description="Runner serial number")],
-    id_cross: Annotated[int, Path(gt=0, description="Cross ID must be a positive integer")],
-    auth: dict = Depends(require_roles(ALLOWED_ROLES))
-):
-    """
-    Add runner to a cross using an alternate endpoint.
-
-    This function provides functionality to associate a runner with a cross. The runner
-    is identified by their serial number, and the cross is identified by its ID. The request
-    requires authorization based on specific roles.
-
-    :param serial_number: The serial number of the runner. The serial number cannot be an
-        empty string.
-    :param id_cross: The unique identifier of the cross. It must be a positive integer.
-    :param auth: Dictionary containing authentication information; provided automatically
-        via dependency injection.
-    :return: A dictionary or object containing the result of the operation, such as
-        confirmation of the runner being added to the cross.
-    :raises HTTPException: Raised if the serial number is empty, if the operation fails
-        due to a bad request, or if an unexpected error occurs during the process.
-    """
-    # SECURITY: Validate and sanitize serial_number
-    serial_number_clean = serial_number.strip()
-
-    if not serial_number_clean:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Serial number cannot be empty"
-        )
-
-    # SECURITY: Additional validation - only allow alphanumeric and basic characters
-    if not serial_number_clean.replace('-', '').replace('_', '').isalnum():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Serial number contains invalid characters"
-        )
-
-    try:
-        result = await repo.add_runner(serial_number_clean, id_cross)
-        logger.info("Runner %s added to cross %s", serial_number_clean, id_cross)
-        return result
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except SQLAlchemyError as e:
-        logger.error("Database error adding runner %s to cross %s: %s", serial_number_clean, id_cross, e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to add runner to cross"
-        )
 
 @app.post("/crosses/{cross_id}", status_code=status.HTTP_201_CREATED, summary="Save multiple runner recordings for a cross")
 async def save_cross_recordings(
     cross_id: Annotated[int, Path(gt=-1, description="Cross ID must be a positive integer")],
     recordings: List[RunnerCreate],
-    auth: dict = Depends(require_roles(ALLOWED_ROLES))
+    auth: dict = Depends(require_roles(ALLOWED_ROLES)),
+    repo: CrossRepository = Depends(get_cross_repository)
 ):
     """Save multiple runner recordings with times for a specific cross. Requires PTI, ADMIN, or APTI role."""
 
