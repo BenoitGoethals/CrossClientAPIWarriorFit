@@ -4,6 +4,8 @@ from src.core.config_reader import get_config
 
 
 class DatabaseConnection:
+    """Singleton class for managing database connections."""
+
     _instance: "DatabaseConnection | None" = None
     _session_maker: async_sessionmaker[AsyncSession] | None = None
 
@@ -41,4 +43,3 @@ class DatabaseConnection:
     async def get_session(self) -> AsyncSession:
         """Create a new async session."""
         return self.session_maker()
-

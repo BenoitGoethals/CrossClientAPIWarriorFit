@@ -17,14 +17,16 @@ from typing import Optional, Dict, Any
 class WarriorFitClient:
     """Client for WarriorFit API with authentication support."""
 
-    def __init__(self, base_url: str = "https://localhost:8555", cert_path: Optional[str] = None):
+    def __init__(
+        self, base_url: str = "https://localhost:8555", cert_path: Optional[str] = None
+    ):
         """
         Initialize the API client.
 
         :param base_url: Base URL of the API
         :param cert_path: Path to SSL certificate (optional, for self-signed certs)
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.cert_path = cert_path
         self.access_token: Optional[str] = None
         self.api_key: Optional[str] = None
@@ -48,10 +50,7 @@ class WarriorFitClient:
         :return: Token response
         """
         url = f"{self.base_url}/token"
-        data = {
-            "username": username,
-            "password": password
-        }
+        data = {"username": username, "password": password}
 
         print(f"\n🔐 Logging in as '{username}'...")
         try:
@@ -154,7 +153,9 @@ class WarriorFitClient:
 
         try:
             with self._get_client() as client:
-                response = client.post(url, headers=self._get_headers(), json=recordings)
+                response = client.post(
+                    url, headers=self._get_headers(), json=recordings
+                )
                 response.raise_for_status()
                 print(f"✅ Success: Recordings saved")
                 return response.json() if response.text else {}
@@ -178,8 +179,7 @@ def test_api():
 
     # Initialize client
     client = WarriorFitClient(
-        base_url="https://localhost:8555",
-        cert_path="./src/certs/cert.pem"
+        base_url="https://localhost:8555", cert_path="./src/certs/cert.pem"
     )
 
     # Test 1: API Key Authentication
@@ -187,7 +187,9 @@ def test_api():
     try:
         client.set_api_key("warriorfit_cross_the_world")
         crosses = client.get_crosses()
-        print(f"\n📊 Retrieved crosses: {json.dumps(crosses[:2] if len(crosses) > 2 else crosses, indent=2)}")
+        print(
+            f"\n📊 Retrieved crosses: {json.dumps(crosses[:2] if len(crosses) > 2 else crosses, indent=2)}"
+        )
     except Exception as e:
         print(f"\n⚠️ API Key test failed: {e}")
 
@@ -207,7 +209,7 @@ def test_api():
 
         if crosses:
             # Get details of first cross
-            first_cross = client.get_cross(crosses[0]['id'])
+            first_cross = client.get_cross(crosses[0]["id"])
             print(f"\n🎯 First cross details:")
             print(json.dumps(first_cross, indent=2))
 
@@ -231,11 +233,13 @@ def test_api():
 
         sample_recordings = [
             {"serial_number": "TEST001", "running_time": 125.5},
-            {"serial_number": "TEST002", "running_time": 132.3}
+            {"serial_number": "TEST002", "running_time": 132.3},
         ]
 
-        choice = input("\nDo you want to test saving recordings? (y/n): ").strip().lower()
-        if choice == 'y':
+        choice = (
+            input("\nDo you want to test saving recordings? (y/n): ").strip().lower()
+        )
+        if choice == "y":
             cross_id = int(input("Enter cross ID to save recordings to: ").strip())
             result = client.save_recordings(cross_id, sample_recordings)
             print(f"\n✅ Recordings saved successfully!")
@@ -251,8 +255,7 @@ def test_api():
 def interactive_mode():
     """Interactive mode for manual API testing."""
     client = WarriorFitClient(
-        base_url="https://localhost:8555",
-        cert_path="./src/certs/cert.pem"
+        base_url="https://localhost:8555", cert_path="./src/certs/cert.pem"
     )
 
     print_banner("WarriorFit API - Interactive Mode")
@@ -301,7 +304,7 @@ def interactive_mode():
                 recordings = []
                 while True:
                     serial = input("Serial number (or 'done'): ").strip()
-                    if serial.lower() == 'done':
+                    if serial.lower() == "done":
                         break
                     time = float(input("Running time (seconds): ").strip())
                     recordings.append({"serial_number": serial, "running_time": time})
@@ -329,7 +332,8 @@ def interactive_mode():
 if __name__ == "__main__":
     import sys
 
-    print("""
+    print(
+        """
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                   WarriorFit API Test Client                         ║
 ║                                                                      ║
@@ -337,7 +341,8 @@ if __name__ == "__main__":
 ║  Supports: OAuth2 (username/password) and API Key                   ║
 ║  HTTP Client: httpx (modern, async-ready)                           ║
 ╚══════════════════════════════════════════════════════════════════════╝
-    """)
+    """
+    )
 
     if len(sys.argv) > 1 and sys.argv[1] == "--interactive":
         interactive_mode()

@@ -1,5 +1,7 @@
 """Logging configuration for the application."""
+
 import logging
+import os
 from email.utils import formataddr
 from logging.handlers import RotatingFileHandler, SMTPHandler
 from pathlib import Path
@@ -7,9 +9,8 @@ from typing import Sequence
 
 
 class SmtpHandler(SMTPHandler):
-    """
+    """ """
 
-    """
     def __init__(
         self,
         mailhost: tuple[str, int],
@@ -21,7 +22,14 @@ class SmtpHandler(SMTPHandler):
         use_ssl: bool = False,
         timeout: float = 10.0,
     ):
-        super().__init__(mailhost, from_addr, list(toaddrs), subject, credentials=credentials, secure=() if use_tls else None)
+        super().__init__(
+            mailhost,
+            from_addr,
+            list(toaddrs),
+            subject,
+            credentials=credentials,
+            secure=() if use_tls else None,
+        )
         self._use_tls = use_tls
         self._use_ssl = use_ssl
         self._timeout = timeout
@@ -89,24 +97,27 @@ def setup_logging(mail_config=None):
         if mail_config.username and mail_config.password:
             credentials = (mail_config.username, mail_config.password)
 
-        mail_handler = SmtpHandler(
-            mailhost=(mail_config.host, mail_config.port),
-            from_addr=from_addr,
-            toaddrs=to_adders,
-            subject="[WarriorFit] Auth warning/error",
-            credentials=credentials,
-            use_tls=bool(mail_config.use_tls),
-            use_ssl=bool(mail_config.use_ssl),
-        )
-        mail_handler.setLevel(logging.WARNING)
-        mail_handler.setFormatter(
-            logging.Formatter(
-                "From: %(name)s\n"
-                "Level: %(levelname)s\n"
-                "Time: %(asctime)s\n\n"
-                "%(message)s"
-            )
-        )
+        app_env = os.getenv("APP_ENV", "development")
+        if app_env != "development":
 
-        # Only auth warnings+ trigger email
-        auth_logger.addHandler(mail_handler)
+            mail_handler = SmtpHandler(
+                mailhost=(mail_config.host, mail_config.port),
+                from_addr=from_addr,
+                toaddrs=to_adders,
+                subject="[WarriorFit] Auth warning/error",
+                credentials=credentials,
+                use_tls=bool(mail_config.use_tls),
+                use_ssl=bool(mail_config.use_ssl),
+            )
+            mail_handler.setLevel(logging.WARNING)
+            mail_handler.setFormatter(
+                logging.Formatter(
+                    "From: %(name)s\n"
+                    "Level: %(levelname)s\n"
+                    "Time: %(asctime)s\n\n"
+                    "%(message)s"
+                )
+            )
+
+            # Only auth warnings+ trigger email
+            auth_logger.addHandler(mail_handler)

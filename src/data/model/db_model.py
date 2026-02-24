@@ -8,7 +8,9 @@ from sqlalchemy import (
     Boolean,
     Float,
     Enum as SAEnum,
-    func, UniqueConstraint, )
+    func,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -17,9 +19,6 @@ from src.data.model.role import Role
 
 class Base(DeclarativeBase):
     pass
-
-
-
 
 
 class User(Base):
@@ -38,14 +37,15 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
-
-
 # CROSS
+
 
 class Cross(Base):
     __tablename__ = "cross"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, nullable=False)
+    id: Mapped[int] = mapped_column(
+        primary_key=True, autoincrement=True, nullable=False
+    )
     datetime_start: Mapped[TIMESTAMP] = mapped_column(TIMESTAMP, nullable=False)
     distance: Mapped[float] = mapped_column(Float, nullable=False)
     executed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -59,7 +59,9 @@ class Cross(Base):
 class Runner(Base):
     __tablename__ = "runners"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, nullable=False)
+    id: Mapped[int] = mapped_column(
+        primary_key=True, autoincrement=True, nullable=False
+    )
     serial_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     running_time: Mapped[float] = mapped_column(Float, nullable=False)
 
@@ -77,11 +79,11 @@ class CrossRunners(Base):
 
 class Unit(Base):
     __tablename__ = "units"
-    __table_args__ = (
-        UniqueConstraint("name", name="uq_units_name"),
-    )
+    __table_args__ = (UniqueConstraint("name", name="uq_units_name"),)
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, nullable=False)
+    id: Mapped[int] = mapped_column(
+        primary_key=True, autoincrement=True, nullable=False
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     base_location: Mapped[str] = mapped_column(String(150), nullable=False)
 
@@ -90,5 +92,3 @@ class Unit(Base):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.base_location})"
-
-

@@ -28,6 +28,7 @@ class ApiConfig:
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+
 @dataclass(frozen=True)
 class MailConfig:
     host: str
@@ -48,6 +49,8 @@ class Config:
 
 
 class ConfigReader:
+    """Singleton class for loading application configuration."""
+
     _instance: "ConfigReader | None" = None
     _config: Config | None = None
 
@@ -85,8 +88,8 @@ class ConfigReader:
 
         self._config = Config(
             database=DatabaseConfig(**raw_config["database"]),
-            api=ApiConfig(**raw_config["api"])
-            ,mail=MailConfig(**raw_config["mail"])
+            api=ApiConfig(**raw_config["api"]),
+            mail=MailConfig(**raw_config["mail"]),
         )
 
     @property
