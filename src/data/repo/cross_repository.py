@@ -40,7 +40,12 @@ class CrossRepository:
         :rtype: Any | None
         """
         async with self._db.session_maker() as session:
-            stmt = select(Cross).filter(Cross.executed == False).order_by(Cross.id).options(selectinload(Cross.runners))
+            stmt = (
+                select(Cross)
+                .filter(Cross.executed == False)
+                .order_by(Cross.id)
+                .options(selectinload(Cross.runners))
+            )
             try:
                 result = await session.scalars(stmt)
                 return result.all()
@@ -62,7 +67,11 @@ class CrossRepository:
         :rtype: Cross | None
         """
         async with self._db.session_maker() as session:
-            stmt = select(Cross).where(Cross.id == id_cross).options(selectinload(Cross.runners))
+            stmt = (
+                select(Cross)
+                .where(Cross.id == id_cross)
+                .options(selectinload(Cross.runners))
+            )
             try:
                 result = await session.scalars(stmt)
                 return result.one_or_none()
@@ -70,14 +79,16 @@ class CrossRepository:
                 self._logger.error("Database error fetching cross %s: %s", id_cross, e)
                 return None
 
-    async def get_user_credentials(self,username:str)->User|None:
+    async def get_user_credentials(self, username: str) -> User | None:
         async with self._db.session_maker() as session:
             stmt = select(User).where(User.username == username)
             try:
                 result = await session.scalars(stmt)
                 return result.one_or_none()
             except SQLAlchemyError as e:
-                self._logger.error("Database error fetching user credentials for %s: %s", username, e)
+                self._logger.error(
+                    "Database error fetching user credentials for %s: %s", username, e
+                )
                 return None
 
     async def update_password_hash(self, username: str, new_hash: str) -> bool:
@@ -94,14 +105,20 @@ class CrossRepository:
                 result = await session.scalars(stmt)
                 user = result.one_or_none()
                 if user is None:
-                    self._logger.error("User %s not found for password update", username)
+                    self._logger.error(
+                        "User %s not found for password update", username
+                    )
                     return False
                 user.password_hash = new_hash
                 await session.commit()
-                self._logger.info("Password hash upgraded to Argon2 for user: %s", username)
+                self._logger.info(
+                    "Password hash upgraded to Argon2 for user: %s", username
+                )
                 return True
             except SQLAlchemyError as e:
-                self._logger.error("Database error updating password hash for %s: %s", username, e)
+                self._logger.error(
+                    "Database error updating password hash for %s: %s", username, e
+                )
                 await session.rollback()
                 return False
 
@@ -130,7 +147,7 @@ class CrossRepository:
                 # Using SQLAlchemy ORM with parameterized queries (SECURE)
                 runner = Runner(
                     serial_number=serial_number,
-                    running_time=0.0  # Default time, can be updated later
+                    running_time=0.0,  # Default time, can be updated later
                 )
 
                 # Add runner to the session and the cross
@@ -138,15 +155,27 @@ class CrossRepository:
                 cross.runners.append(runner)
 
                 await session.commit()
-                self._logger.info("Runner with serial %s added to cross %s", serial_number, cross_id)
+                self._logger.info(
+                    "Runner with serial %s added to cross %s", serial_number, cross_id
+                )
                 return True
 
             except IntegrityError as e:
-                self._logger.error("Integrity constraint violated adding runner %s to cross %s: %s", serial_number, cross_id, e)
+                self._logger.error(
+                    "Integrity constraint violated adding runner %s to cross %s: %s",
+                    serial_number,
+                    cross_id,
+                    e,
+                )
                 await session.rollback()
                 return False
             except SQLAlchemyError as e:
-                self._logger.error("Database error adding runner %s to cross %s: %s", serial_number, cross_id, e)
+                self._logger.error(
+                    "Database error adding runner %s to cross %s: %s",
+                    serial_number,
+                    cross_id,
+                    e,
+                )
                 await session.rollback()
                 return False
 
@@ -161,7 +190,11 @@ class CrossRepository:
         """
         async with self._db.session_maker() as session:
             try:
-                stmt = select(Cross).where(Cross.id == cross_id).options(selectinload(Cross.runners))
+                stmt = (
+                    select(Cross)
+                    .where(Cross.id == cross_id)
+                    .options(selectinload(Cross.runners))
+                )
                 result = await session.scalars(stmt)
                 cross = result.one_or_none()
 
@@ -172,7 +205,9 @@ class CrossRepository:
                 return list(cross.runners)
 
             except SQLAlchemyError as e:
-                self._logger.error("Database error fetching runners for cross %s: %s", cross_id, e)
+                self._logger.error(
+                    "Database error fetching runners for cross %s: %s", cross_id, e
+                )
                 return []
 
     async def add_cross(self, cross_id: int, cross: list[tuple[int, float]]):
@@ -208,7 +243,11 @@ class CrossRepository:
         """
         async with self._db.session_maker() as session:
             try:
-                stmt = select(Cross).where(Cross.id == cross_id).options(selectinload(Cross.runners))
+                stmt = (
+                    select(Cross)
+                    .where(Cross.id == cross_id)
+                    .options(selectinload(Cross.runners))
+                )
                 result = await session.scalars(stmt)
                 cross = result.one_or_none()
                 if cross is None:
@@ -219,6 +258,8 @@ class CrossRepository:
                 cross.executed = True
                 await session.commit()
             except SQLAlchemyError as e:
-                self._logger.error("Database error saving recordings for cross %s: %s", cross_id, e)
+                self._logger.error(
+                    "Database error saving recordings for cross %s: %s", cross_id, e
+                )
                 await session.rollback()
                 return

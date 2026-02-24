@@ -40,7 +40,7 @@ def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bo
         - needs_rehash: True if hash is bcrypt and should be upgraded to Argon2
     """
     # Try Argon2 first (new format starts with $argon2)
-    if hashed_password.startswith('$argon2'):
+    if hashed_password.startswith("$argon2"):
         try:
             ph.verify(hashed_password, plain_password)
             # Check if parameters need upgrade
@@ -52,11 +52,10 @@ def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bo
             return False, False
 
     # Fall back to bcrypt (legacy format starts with $2b$, $2a$, or $2y$)
-    if hashed_password.startswith(('$2b$', '$2a$', '$2y$')):
+    if hashed_password.startswith(("$2b$", "$2a$", "$2y$")):
         try:
             is_valid = bcrypt.checkpw(
-                plain_password.encode('utf-8'),
-                hashed_password.encode('utf-8')
+                plain_password.encode("utf-8"), hashed_password.encode("utf-8")
             )
             # If bcrypt password is valid, it needs rehashing to Argon2
             return is_valid, is_valid
@@ -94,17 +93,23 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=config.api.access_token_expire_minutes)
+        expire = datetime.utcnow() + timedelta(
+            minutes=config.api.access_token_expire_minutes
+        )
 
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, config.api.oauth2_secret_key, algorithm=config.api.algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, config.api.oauth2_secret_key, algorithm=config.api.algorithm
+    )
     return encoded_jwt
 
 
 def verify_token(token: str, credentials_exception: HTTPException) -> str:
     """Verify and decode a JWT token."""
     try:
-        payload = jwt.decode(token, config.api.oauth2_secret_key, algorithms=[config.api.algorithm])
+        payload = jwt.decode(
+            token, config.api.oauth2_secret_key, algorithms=[config.api.algorithm]
+        )
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
@@ -113,7 +118,9 @@ def verify_token(token: str, credentials_exception: HTTPException) -> str:
         raise credentials_exception
 
 
-async def authenticate_user(username: str, password: str, repo: CrossRepository) -> Optional[str]:
+async def authenticate_user(
+    username: str, password: str, repo: CrossRepository
+) -> Optional[str]:
     """
     Authenticate a user using username and password.
 
@@ -148,7 +155,7 @@ async def authenticate_user(username: str, password: str, repo: CrossRepository)
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    repo: CrossRepository = Depends(get_cross_repository)
+    repo: CrossRepository = Depends(get_cross_repository),
 ) -> dict:
     """
     Get the current authenticated user from the token.
@@ -169,8 +176,4 @@ async def get_current_user(
         auth_logger.warning(f"Invalid token for user: {username}")
         raise credentials_exception
 
-    return {
-        "username": username,
-        "role": user.role.value,
-        "is_active": user.is_active
-    }
+    return {"username": username, "role": user.role.value, "is_active": user.is_active}

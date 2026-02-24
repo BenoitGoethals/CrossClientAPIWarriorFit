@@ -1,4 +1,5 @@
 """Application lifespan management."""
+
 import os
 import logging
 from pathlib import Path

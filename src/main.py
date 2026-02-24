@@ -1,4 +1,5 @@
 """WarriorFit API - FastAPI application for running event management."""
+
 import logging
 from typing import List, Annotated
 from datetime import timedelta
@@ -40,7 +41,7 @@ app = FastAPI(
     docs_url="/frago",
     redoc_url="/fragore",
     port=8550,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -53,6 +54,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+
 class AuthFailureAuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -61,7 +63,10 @@ class AuthFailureAuditMiddleware(BaseHTTPMiddleware):
         public_paths = {"/", "/docs", "/openapi.json", "/redoc"}
         path = request.url.path
 
-        if path not in public_paths and response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+        if path not in public_paths and response.status_code in (
+            status.HTTP_401_UNAUTHORIZED,
+            status.HTTP_403_FORBIDDEN,
+        ):
             client_host = request.client.host if request.client else "<unknown>"
             auth_logger.warning(
                 "Auth failed: status=%s method=%s path=%s client=%s",
@@ -73,7 +78,9 @@ class AuthFailureAuditMiddleware(BaseHTTPMiddleware):
 
         return response
 
+
 app.add_middleware(AuthFailureAuditMiddleware)
+
 
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
@@ -102,6 +109,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": exc.errors(), "body": body_preview},
     )
+
 
 # Define allowed roles for API access
 ALLOWED_ROLES = ["PTI", "ADMIN", "APTI"]
@@ -252,7 +260,7 @@ async def root():
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    repo: CrossRepository = Depends(get_cross_repository)
+    repo: CrossRepository = Depends(get_cross_repository),
 ):
     """
     OAuth2 compatible token login endpoint.
@@ -280,7 +288,7 @@ async def login(
 @app.get("/crosses", response_model=List[CrossResponse], summary="Get all crosses")
 async def get_crosses(
     auth: dict = Depends(require_roles(ALLOWED_ROLES)),
-    repo: CrossRepository = Depends(get_cross_repository)
+    repo: CrossRepository = Depends(get_cross_repository),
 ):
     """Retrieve all crosses from the database. Requires PTI, ADMIN, or APTI role."""
     try:
@@ -292,23 +300,29 @@ async def get_crosses(
         logger.error("Database error fetching crosses: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve crosses"
+            detail="Failed to retrieve crosses",
         )
 
 
-@app.post("/crosses/{cross_id}", status_code=status.HTTP_201_CREATED, summary="Save multiple runner recordings for a cross")
+@app.post(
+    "/crosses/{cross_id}",
+    status_code=status.HTTP_201_CREATED,
+    summary="Save multiple runner recordings for a cross",
+)
 async def save_cross_recordings(
-    cross_id: Annotated[int, Path(gt=-1, description="Cross ID must be a positive integer")],
+    cross_id: Annotated[
+        int, Path(gt=-1, description="Cross ID must be a positive integer")
+    ],
     recordings: List[RunnerCreate],
     auth: dict = Depends(require_roles(ALLOWED_ROLES)),
-    repo: CrossRepository = Depends(get_cross_repository)
+    repo: CrossRepository = Depends(get_cross_repository),
 ):
     """Save multiple runner recordings with times for a specific cross. Requires PTI, ADMIN, or APTI role."""
 
     if not recordings:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Recordings list cannot be empty"
+            detail="Recordings list cannot be empty",
         )
 
     logger.info("Received POST request to /crosses/%s", cross_id)
@@ -321,28 +335,31 @@ async def save_cross_recordings(
             if recording.running_time is None or recording.running_time < 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Recording at index {idx}: Running time must be a non-negative number"
+                    detail=f"Recording at index {idx}: Running time must be a non-negative number",
                 )
-            runners.append(Runner(
-                running_time=recording.running_time,
-                serial_number=None
-            ))
+            runners.append(
+                Runner(running_time=recording.running_time, serial_number=None)
+            )
 
         result = await repo.save_recordings(cross_id, runners)
-        logger.info("Successfully saved %s recordings for cross %s", len(runners), cross_id)
+        logger.info(
+            "Successfully saved %s recordings for cross %s", len(runners), cross_id
+        )
         return result
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except SQLAlchemyError as e:
-        logger.error("Database error saving recordings for cross %s: %s", cross_id, e, exc_info=True)
+        logger.error(
+            "Database error saving recordings for cross %s: %s",
+            cross_id,
+            e,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save cross recordings"
+            detail="Failed to save cross recordings",
         )
 
 
@@ -389,5 +406,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8555,
         ssl_keyfile=str(key_path),
-        ssl_certfile=str(cert_path)
+        ssl_certfile=str(cert_path),
     )

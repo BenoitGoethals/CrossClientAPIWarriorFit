@@ -1,4 +1,5 @@
 """Logging configuration for the application."""
+
 import logging
 import os
 from email.utils import formataddr
@@ -8,9 +9,8 @@ from typing import Sequence
 
 
 class SmtpHandler(SMTPHandler):
-    """
+    """ """
 
-    """
     def __init__(
         self,
         mailhost: tuple[str, int],
@@ -22,7 +22,14 @@ class SmtpHandler(SMTPHandler):
         use_ssl: bool = False,
         timeout: float = 10.0,
     ):
-        super().__init__(mailhost, from_addr, list(toaddrs), subject, credentials=credentials, secure=() if use_tls else None)
+        super().__init__(
+            mailhost,
+            from_addr,
+            list(toaddrs),
+            subject,
+            credentials=credentials,
+            secure=() if use_tls else None,
+        )
         self._use_tls = use_tls
         self._use_ssl = use_ssl
         self._timeout = timeout
@@ -91,7 +98,7 @@ def setup_logging(mail_config=None):
             credentials = (mail_config.username, mail_config.password)
 
         app_env = os.getenv("APP_ENV", "development")
-        if  app_env != "development":
+        if app_env != "development":
 
             mail_handler = SmtpHandler(
                 mailhost=(mail_config.host, mail_config.port),
