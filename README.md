@@ -7,6 +7,7 @@ A secure **FastAPI** backend application for managing running events with compre
 - [Overview](#overview)
 - [Features](#features)
 - [Security Architecture](#security-architecture)
+- [Request Flow](#request-flow)
 - [Authentication & Authorization](#authentication--authorization)
 - [SSL/TLS Certificates](#ssltls-certificates)
 - [Installation](#installation)
@@ -97,6 +98,66 @@ WarriorFit API is a running event management system that provides secure RESTful
 └─────────────────────────────────────────────────────────────┘
 ```
 Security details audit : [SECURITY](SECURITY.md)
+
+---
+
+## Request Flow
+
+Two distinct flows exist: acquiring a JWT token via `/token`, and calling any protected endpoint with an API key.
+
+```mermaid
+flowchart TD
+
+    %% ── TOKEN ACQUISITION ────────────────────────────────────────────
+    subgraph TOKEN ["🔑 Token Acquisition — POST /token"]
+        T1([Client\nPOST /token\nusername + password]) --> T2[SSL/TLS\nDecrypt]
+        T2 --> T3{Rate limit\n5 req / min\nper IP?}
+        T3 -->|Exceeded| T4[429 Too Many Requests]
+        T3 -->|OK| T5[authenticate_user\nfetch user from DB]
+        T5 --> T6{User found\nin DB?}
+        T6 -->|No| T7[401 Unauthorized\nIncorrect username or password]
+        T6 -->|Yes| T8{Password\nhash format?}
+        T8 -->|"starts with $argon2"| T9[Verify with\nArgon2id]
+        T8 -->|"starts with $2b / $2a"| T10[Verify with\nbcrypt]
+        T9 -->|Invalid| T7
+        T10 -->|Invalid| T7
+        T9 -->|Valid + needs_rehash| T11[Rehash → Argon2id\nUpdate DB]
+        T10 -->|Valid| T11
+        T9 -->|Valid, up to date| T12[create_access_token\nJWT HS256 · 30 min expiry]
+        T11 --> T12
+        T12 --> T13[200 OK\naccess_token + token_type:bearer]
+    end
+
+    %% ── PROTECTED ENDPOINT ───────────────────────────────────────────
+    subgraph API ["🛡️ Protected Endpoint — e.g. GET /crosses"]
+        A1([Client\nRequest + X-API-Key header]) --> A2[SSL/TLS\nDecrypt]
+        A2 --> A3[SlowAPIMiddleware\nGlobal rate-limit check]
+        A3 --> A4[CORSMiddleware\nOrigin filtering]
+        A4 --> A5[AuthFailureAuditMiddleware\nLogs any 401/403 with IP]
+        A5 --> A6{X-API-Key\nheader present?}
+        A6 -->|Present + valid key| A7["auth = {type:api_key, role:ADMIN}"]
+        A6 -->|Present + INVALID key| A8[403 Forbidden\n'Invalid API Key'\nLogged: ****abcd]
+        A6 -->|Absent| A9[403 Forbidden\n'Invalid or missing API Key']
+        A7 --> A10["require_roles([PTI, ADMIN, APTI])\nRBAC dependency"]
+        A10 --> A11{Role in\nallowed list?}
+        A11 -->|No| A12[403 Forbidden\n'Access denied']
+        A11 -->|Yes| A13[Input Validation\nPydantic schemas\nPath param constraints]
+        A13 -->|Invalid| A14[422 Unprocessable Entity]
+        A13 -->|Valid| A15[Business Logic\nCrossRepository]
+        A15 --> A16[(PostgreSQL\nSQLAlchemy ORM\nParameterized queries)]
+        A16 -->|DB error| A17[500 Internal Server Error\nGeneric message to client\nFull stack trace in app.log]
+        A16 -->|Success| A18[Serialize response\nPydantic model\nFiltered fields only]
+        A18 --> A19[200 / 201 OK\nJSON Response]
+    end
+
+    %% ── AUDIT LOGGING ────────────────────────────────────────────────
+    T7  -.->|WARNING → auth.log| LOG[(Auth Logger\nauth.log)]
+    A8  -.->|WARNING → auth.log| LOG
+    A9  -.->|WARNING → auth.log| LOG
+    A12 -.->|WARNING → auth.log| LOG
+    A5  -.->|WARNING on 401/403 → auth.log| LOG
+```
+
 ---
 
 ## Authentication & Authorization

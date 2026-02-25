@@ -69,14 +69,13 @@ A comprehensive overview of all security measures implemented in the WarriorFit 
 ┌─────────────────────────────────────────────────────────────────┐
 │              5. Authentication Layer                             │
 │                                                                 │
-│  ┌──────────────────────┐     ┌──────────────────────┐         │
-│  │   X-API-Key Header   │     │  OAuth2 Bearer Token │         │
-│  │   (if present, MUST  │     │  (JWT, HS256)        │         │
-│  │    be valid)         │     │  30 min expiry       │         │
-│  └──────────┬───────────┘     └──────────┬───────────┘         │
-│             │ ADMIN role                  │ role from DB        │
-│             └─────────┬───────────────────┘                     │
-└───────────────────────┼─────────────────────────────────────────┘
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │   X-API-Key Header                                        │  │
+│  │   Present + valid   → ADMIN role                         │  │
+│  │   Present + invalid → 403 FORBIDDEN                      │  │
+│  │   Absent            → 403 FORBIDDEN                      │  │
+│  └──────────────────────────────┬───────────────────────────┘  │
+└──────────────────────────────────┼──────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -108,7 +107,7 @@ This section maps each OWASP API Security risk to the measures implemented in Wa
 | # | OWASP Risk | Status | Implementation |
 |---|------------|--------|----------------|
 | API1 | Broken Object Level Authorization (BOLA) | Mitigated | RBAC enforced on all `/crosses/*` endpoints; users must have PTI/ADMIN/APTI role |
-| API2 | Broken Authentication | Mitigated | JWT with expiry, Argon2id hashing, rate limiting on `/token`, no silent auth fallback |
+| API2 | Broken Authentication | Mitigated | JWT with expiry, Argon2id hashing, rate limiting on `/token`, API key required on all protected endpoints (no OAuth2 fallback) |
 | API3 | Broken Object Property Level Authorization | Mitigated | Pydantic response models control which fields are serialized; ORM prevents mass assignment |
 | API4 | Unrestricted Resource Consumption | Partially mitigated | Rate limiting on `/token` (5/min); other endpoints not yet rate-limited |
 | API5 | Broken Function Level Authorization (BFLA) | Mitigated | `require_roles()` dependency factory enforces role checks on every protected endpoint |
@@ -176,39 +175,42 @@ Static API key authentication via the `X-API-Key` HTTP header, intended for serv
 
 **Key security properties:**
 
-- **No silent fallback**: If the `X-API-Key` header is present, the key **must** be valid. An invalid key is immediately rejected with `403 FORBIDDEN` — the server does **not** silently fall back to OAuth2. This prevents attackers from probing API keys while falling back to a stolen OAuth2 token.
-- **Role assignment**: API key authenticated requests receive the `ADMIN` role and are subject to the same RBAC checks as OAuth2 users.
+- **API key required**: All protected endpoints require a valid `X-API-Key` header. Requests without the header are rejected immediately with `403 FORBIDDEN`.
+- **No silent fallback**: An invalid key is rejected with `403 FORBIDDEN`; the server never falls back to another auth mechanism.
+- **Role assignment**: API key authenticated requests receive the `ADMIN` role and are subject to the same RBAC checks as all other requests.
 - **Credential masking**: Invalid API key attempts are logged with only the last 4 characters visible (`****abcd`).
 
 ```python
-# Fail-closed design — no silent fallback
+# Fail-closed design — API key required; no OAuth2 fallback
 if api_key is not None:
     if api_key == API_KEY:
         return {"type": "api_key", "role": API_KEY_ROLE}  # ADMIN
     # Header present but invalid — reject immediately
+    auth_logger.warning("Invalid API key attempted: %s", _mask_key(api_key))
     raise HTTPException(status_code=403, detail="Invalid API Key")
 
-# No header — use OAuth2
-return {"type": "oauth2", **user}
+# No header present — also rejected
+auth_logger.warning("Invalid API key attempted: %s", _mask_key(api_key))
+raise HTTPException(status_code=403, detail="Invalid or missing API Key")
 ```
 
-### 1.3 Combined Authentication Flow
+### 1.3 Authentication Flow
+
+All protected endpoints require a valid API key. There is no OAuth2 fallback for the `get_current_user_or_api_key` dependency.
 
 ```
 Request arrives
     │
     ├── X-API-Key header present?
     │       ├── YES, key valid    → Authenticated as ADMIN (api_key)
-    │       └── YES, key invalid  → 403 FORBIDDEN (no fallback)
+    │       └── YES, key invalid  → 403 FORBIDDEN
     │
-    └── No X-API-Key header
-            ├── Bearer token valid  → Authenticated as OAuth2 user
-            └── Token invalid       → 401 UNAUTHORIZED
+    └── No X-API-Key header → 403 FORBIDDEN "Invalid or missing API Key"
 ```
 
 **OWASP relevance:**
-- **API2:2023 (Broken Authentication)**: Fail-closed design prevents auth bypass via header manipulation.
-- **A07:2021 (Identification and Authentication Failures)**: No default credentials accepted at runtime; invalid keys are rejected and logged.
+- **API2:2023 (Broken Authentication)**: Fail-closed design prevents auth bypass via header manipulation; missing key is treated as a failure, not a fallback trigger.
+- **A07:2021 (Identification and Authentication Failures)**: No default credentials accepted at runtime; absent or invalid keys are rejected and logged.
 
 ---
 
@@ -701,12 +703,12 @@ Middleware executes in the **reverse** order of registration. The effective proc
 | `/docs` | GET | None | None | None | None |
 | `/redoc` | GET | None | None | None | None |
 | `/token` | POST | Credentials | None | **5/min** | Username/password form |
-| `/crosses` | GET | OAuth2 / API Key | PTI, ADMIN, APTI | None | None |
-| `/crosses/{id_cross}` | GET | OAuth2 / API Key | PTI, ADMIN, APTI | None | `id_cross > 0` |
-| `/crosses/{serial}/{id_cross}` | POST | OAuth2 / API Key | PTI, ADMIN, APTI | None | Serial: 1-10 chars, alphanumeric/-/_ ; `id_cross > 0` |
-| `/crosses/runners/{cross_id}` | GET | OAuth2 / API Key | PTI, ADMIN, APTI | None | `cross_id > 0` |
-| `/crosses/runner/{serial}/{id_cross}` | POST | OAuth2 / API Key | PTI, ADMIN, APTI | None | Serial: 1-10 chars, alphanumeric/-/_ ; `id_cross > 0` |
-| `/crosses/{cross_id}` | POST | OAuth2 / API Key | PTI, ADMIN, APTI | None | `cross_id >= 0`, running_time >= 0, non-empty list |
+| `/crosses` | GET | API Key | PTI, ADMIN, APTI | None | None |
+| `/crosses/{id_cross}` | GET | API Key | PTI, ADMIN, APTI | None | `id_cross > 0` |
+| `/crosses/{serial}/{id_cross}` | POST | API Key | PTI, ADMIN, APTI | None | Serial: 1-10 chars, alphanumeric/-/_ ; `id_cross > 0` |
+| `/crosses/runners/{cross_id}` | GET | API Key | PTI, ADMIN, APTI | None | `cross_id > 0` |
+| `/crosses/runner/{serial}/{id_cross}` | POST | API Key | PTI, ADMIN, APTI | None | Serial: 1-10 chars, alphanumeric/-/_ ; `id_cross > 0` |
+| `/crosses/{cross_id}` | POST | API Key | PTI, ADMIN, APTI | None | `cross_id >= 0`, running_time >= 0, non-empty list |
 
 ---
 
@@ -768,5 +770,5 @@ Areas for further hardening before production deployment:
 
 ---
 
-**Version:** 0.0.21
-**Last Updated:** 2026-02-15
+**Version:** 0.0.22
+**Last Updated:** 2026-02-25
