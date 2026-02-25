@@ -55,9 +55,15 @@ async def get_current_user_or_api_key(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key"
         )
+    elif api_key is None:
+        auth_logger.warning("Invalid API key attempted: %s", _mask_key(api_key))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or missing API Key"
+        )
+    return None
 
     # No API key header — use OAuth2 token
-    return {"type": "oauth2", **user}
+    #return {"type": "oauth2", **user}
 
 
 def require_roles(allowed_roles: List[str]):
