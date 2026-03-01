@@ -15,6 +15,8 @@ from src.core.lifespan import lifespan
 from src.core.auth import require_roles
 from src.core.oauth2 import authenticate_user, create_access_token
 from src.core.version_loader import load_version
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
 from fastapi import FastAPI, HTTPException, status, Request, Depends, Path
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -361,6 +363,64 @@ async def save_cross_recordings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save cross recordings",
         )
+
+
+from src.core.config_reader import get_config
+
+
+class DatabaseConnection:
+    """Singleton class for managing database connections."""
+
+    _instance: "DatabaseConnection | None" = None
+    _session_maker: async_sessionmaker[AsyncSession] | None = None
+
+    def __new__(cls) -> "DatabaseConnection":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialize()
+        return cls._instance
+
+    def _initialize(self) -> None:
+        """Initialize the async engine and session maker."""
+        config = get_config()
+
+        engine = create_async_engine(
+            config.database.connection_url,
+            echo=True,  # Set to False in production
+            pool_pre_ping=True,
+            # Connection pool configuration
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
+            pool_recycle=3600,
+            # Connection timeouts
+            connect_args={
+                "timeout": 10,  # Connection timeout in seconds
+                "command_timeout": 60,  # Command execution timeout
+                "server_settings": {
+                    "application_name": "WarriorFit_API"
+                }
+            }
+        )
+
+        self._session_maker = async_sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False,
+        )
+
+    @property
+    def session_maker(self) -> async_sessionmaker[AsyncSession]:
+        """Get the async session maker."""
+        if self._session_maker is None:
+            raise RuntimeError("Database connection not initialized")
+        return self._session_maker
+
+    async def get_session(self) -> AsyncSession:
+        """Create a new async session."""
+        return self.session_maker()
 
 
 if __name__ == "__main__":

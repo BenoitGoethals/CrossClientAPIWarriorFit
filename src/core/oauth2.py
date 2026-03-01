@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
@@ -24,20 +25,11 @@ config = get_config()
 auth_logger = logging.getLogger("auth")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bool]:
+def _verify_password_sync(plain_password: str, hashed_password: str) -> Tuple[bool, bool]:
     """
-    Verify a password against its hash (supports both bcrypt and Argon2).
+    Synchronous password verification (internal use only).
 
-    This function supports migration from bcrypt to Argon2:
-    - First tries Argon2 verification (new format)
-    - Falls back to bcrypt verification (legacy format)
-    - Returns (is_valid, needs_rehash) tuple
-
-    :param plain_password: The plain text password to verify
-    :param hashed_password: The stored hash (bcrypt or Argon2 format)
-    :return: Tuple of (is_valid, needs_rehash)
-        - is_valid: True if password matches
-        - needs_rehash: True if hash is bcrypt and should be upgraded to Argon2
+    This is the blocking implementation that will be run in a thread pool.
     """
     # Try Argon2 first (new format starts with $argon2)
     if hashed_password.startswith("$argon2"):
@@ -66,7 +58,36 @@ def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bo
     return False, False
 
 
-def get_password_hash(password: str) -> str:
+async def verify_password(plain_password: str, hashed_password: str) -> Tuple[bool, bool]:
+    """
+    Verify a password against its hash (supports both bcrypt and Argon2).
+
+    This function supports migration from bcrypt to Argon2:
+    - First tries Argon2 verification (new format)
+    - Falls back to bcrypt verification (legacy format)
+    - Returns (is_valid, needs_rehash) tuple
+
+    Runs in a thread pool to avoid blocking the event loop.
+
+    :param plain_password: The plain text password to verify
+    :param hashed_password: The stored hash (bcrypt or Argon2 format)
+    :return: Tuple of (is_valid, needs_rehash)
+        - is_valid: True if password matches
+        - needs_rehash: True if hash is bcrypt and should be upgraded to Argon2
+    """
+    return await asyncio.to_thread(_verify_password_sync, plain_password, hashed_password)
+
+
+def _get_password_hash_sync(password: str) -> str:
+    """
+    Synchronous password hashing (internal use only).
+
+    This is the blocking implementation that will be run in a thread pool.
+    """
+    return ph.hash(password)
+
+
+async def get_password_hash(password: str) -> str:
     """
     Hash a password using Argon2id.
 
@@ -83,8 +104,10 @@ def get_password_hash(password: str) -> str:
     - parallelism: 8 threads
     - hash_len: 16 bytes
     - salt_len: 16 bytes
+
+    Runs in a thread pool to avoid blocking the event loop.
     """
-    return ph.hash(password)
+    return await asyncio.to_thread(_get_password_hash_sync, password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -139,7 +162,7 @@ async def authenticate_user(
     if user is None:
         return None
 
-    is_valid, needs_rehash = verify_password(password, user.password_hash)
+    is_valid, needs_rehash = await verify_password(password, user.password_hash)
 
     if not is_valid:
         auth_logger.warning("Invalid password for user: %s", username)
@@ -147,7 +170,7 @@ async def authenticate_user(
 
     # Automatically upgrade bcrypt passwords to Argon2
     if needs_rehash:
-        new_hash = get_password_hash(password)
+        new_hash = await get_password_hash(password)
         await repo.update_password_hash(username, new_hash)
 
     return user.username
