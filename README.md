@@ -74,18 +74,18 @@ WarriorFit API is a running event management system that provides secure RESTful
 ┌─────────────────────────────────────────────────────────────┐
 │              Authentication Layer                           │
 │                                                             │
-│  ┌──────────────────┐       ┌──────────────────┐          │
-│  │   API Key Auth   │       │   OAuth2 Auth    │          │
-│  │   (Header)       │       │   (JWT Token)    │          │
-│  └────────┬─────────┘       └────────┬─────────┘          │
-│           │                           │                     │
-│           └───────────┬───────────────┘                     │
+│  ┌──────────────────┐       ┌──────────────────┐            │
+│  │   API Key Auth   │       │   OAuth2 Auth    │            │
+│  │   (Header)       │       │   (JWT Token)    │            │
+│  └────────┬─────────┘       └────────┬─────────┘            │
+│           │                          │                      │
+│           └───────────┬──────────────┘                      │
 └───────────────────────┼─────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │             Authorization Layer (RBAC)                      │
-│  • Check user role: PTI, ADMIN, or APTI                    │
+│  • Check user role: PTI, ADMIN, or APTI                     │
 │  • Check user is active                                     │
 │  • API keys are assigned ADMIN role                         │
 └────────────────────────┬────────────────────────────────────┘
