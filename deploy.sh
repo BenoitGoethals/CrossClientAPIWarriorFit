@@ -7,6 +7,18 @@ CONTAINER_NAME="api-warriorfit-app"
 IMAGE_NAME="api-warriorfit-app"
 PORT_MAPPING="8555:8555"
 
+# Load WF_SECRET_KEY from .env if not already set in the environment
+if [ -z "${WF_SECRET_KEY}" ]; then
+    if [ -f ".env" ]; then
+        WF_SECRET_KEY=$(grep '^WF_SECRET_KEY=' .env | cut -d '=' -f2-)
+    fi
+fi
+
+if [ -z "${WF_SECRET_KEY}" ]; then
+    echo "ERROR: WF_SECRET_KEY is not set and could not be loaded from .env"
+    exit 1
+fi
+
 echo "=== Docker Deployment Script ==="
 echo ""
 
@@ -47,6 +59,7 @@ sudo docker run -d \
     --restart unless-stopped \
     --name "${CONTAINER_NAME}" \
     -v /home/benoit/path/to/config.yml:/etc/CrossClientAPI/config.yml \
+    -e "WF_SECRET_KEY=${WF_SECRET_KEY}" \
     -p "${PORT_MAPPING}" \
     "${IMAGE_NAME}"
 echo "Container started successfully."
