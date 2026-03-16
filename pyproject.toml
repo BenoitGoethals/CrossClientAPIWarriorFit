@@ -16,4 +16,6 @@ dependencies = [
     "sqlalchemy[all,asyncio]>=2.0.44",
     "uvicorn>=0.38.0",
     "slowapi>=0.1.9",
+    "python-dotenv>=1.0.0",
+    "cryptography>=44.0.0",
 ]

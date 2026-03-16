@@ -1,11 +1,15 @@
 import asyncio
+import base64
+import hashlib
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from jose import JWTError, jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
 import bcrypt
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from src.core.config_reader import get_config
@@ -16,6 +20,10 @@ from src.data.repo.cross_repository import CrossRepository
 # Uses Argon2id (hybrid mode combining Argon2i and Argon2d)
 # Resistant to GPU/ASIC attacks due to memory-hardness
 ph = PasswordHasher()
+
+# Fernet symmetric encryption (used by the user-management service)
+_FERNET_KEY = base64.urlsafe_b64encode(hashlib.sha256(os.environ["WF_SECRET_KEY"].encode()).digest())
+_fernet = Fernet(_FERNET_KEY)
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -53,6 +61,13 @@ def _verify_password_sync(plain_password: str, hashed_password: str) -> Tuple[bo
             return is_valid, is_valid
         except Exception:
             return False, False
+
+    # Fernet fallback (used by the user-management service)
+    try:
+        decrypted = _fernet.decrypt(hashed_password.encode()).decode()
+        return decrypted == plain_password, False
+    except (InvalidToken, Exception):
+        pass
 
     # Unknown hash format
     return False, False
@@ -108,6 +123,11 @@ async def get_password_hash(password: str) -> str:
     Runs in a thread pool to avoid blocking the event loop.
     """
     return await asyncio.to_thread(_get_password_hash_sync, password)
+
+
+def hash_password(password: str) -> str:
+    """Encrypt a plain-text password with Fernet (user-management service format)."""
+    return _fernet.encrypt(password.encode()).decode()
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

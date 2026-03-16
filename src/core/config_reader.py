@@ -2,6 +2,9 @@ import yaml
 import os
 from pathlib import Path
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass
