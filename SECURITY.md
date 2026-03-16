@@ -17,6 +17,7 @@ A comprehensive overview of all security measures implemented in the WarriorFit 
 - [3. Password Security](#3-password-security)
   - [3.1 Argon2id Hashing](#31-argon2id-hashing)
   - [3.2 Automatic bcrypt Migration](#32-automatic-bcrypt-migration)
+  - [3.3 Fernet Password Support (User-Management Service)](#33-fernet-password-support-user-management-service)
 - [4. Rate Limiting](#4-rate-limiting)
 - [5. Input Validation](#5-input-validation)
 - [6. SQL Injection Prevention](#6-sql-injection-prevention)
@@ -107,7 +108,7 @@ This section maps each OWASP API Security risk to the measures implemented in Wa
 | # | OWASP Risk | Status | Implementation |
 |---|------------|--------|----------------|
 | API1 | Broken Object Level Authorization (BOLA) | Mitigated | RBAC enforced on all `/crosses/*` endpoints; users must have PTI/ADMIN/APTI role |
-| API2 | Broken Authentication | Mitigated | JWT with expiry, Argon2id hashing, rate limiting on `/token`, API key required on all protected endpoints (no OAuth2 fallback) |
+| API2 | Broken Authentication | Mitigated | JWT with expiry, Argon2id hashing, Fernet fallback, rate limiting on `/token`, API key required on all protected endpoints (no OAuth2 fallback) |
 | API3 | Broken Object Property Level Authorization | Mitigated | Pydantic response models control which fields are serialized; ORM prevents mass assignment |
 | API4 | Unrestricted Resource Consumption | Partially mitigated | Rate limiting on `/token` (5/min); other endpoints not yet rate-limited |
 | API5 | Broken Function Level Authorization (BFLA) | Mitigated | `require_roles()` dependency factory enforces role checks on every protected endpoint |
@@ -124,12 +125,12 @@ This section maps each OWASP API Security risk to the measures implemented in Wa
 | # | OWASP Risk | Status | Implementation |
 |---|------------|--------|----------------|
 | A01 | Broken Access Control | Mitigated | RBAC with role whitelist, active-user check, API key no longer bypasses role checks |
-| A02 | Cryptographic Failures | Mitigated | Argon2id password hashing, RSA 4096-bit TLS, HS256 JWT signing, automatic bcrypt migration |
+| A02 | Cryptographic Failures | Mitigated | Argon2id password hashing, Fernet symmetric encryption fallback, RSA 4096-bit TLS, HS256 JWT signing, automatic bcrypt migration |
 | A03 | Injection | Mitigated | SQLAlchemy parameterized queries, Pydantic input validation, server-side serial number sanitization |
 | A04 | Insecure Design | Mitigated | Defense-in-depth (multi-layer security), fail-closed auth design, no silent fallback |
 | A05 | Security Misconfiguration | Mostly mitigated | SSL auto-validation, structured config classes; CORS needs restriction for production |
 | A06 | Vulnerable and Outdated Components | Mitigated | `uv.lock` for reproducible builds, modern dependency versions, `--frozen` flag in Docker |
-| A07 | Identification and Authentication Failures | Mitigated | Argon2id, JWT expiry, rate limiting, credential masking in logs |
+| A07 | Identification and Authentication Failures | Mitigated | Argon2id, Fernet fallback, JWT expiry, rate limiting, credential masking in logs |
 | A08 | Software and Data Integrity Failures | Mitigated | Locked dependencies (`uv.lock`), frozen config dataclasses, version tracking |
 | A09 | Security Logging and Monitoring Failures | Mitigated | Dedicated auth logger, rotating log files, email alerts, audit middleware |
 | A10 | Server-Side Request Forgery (SSRF) | Not applicable | No user-supplied URL fetching |
@@ -297,17 +298,49 @@ Login request (username + password)
     │           ├── Valid              → Proceed
     │           └── Invalid            → 401
     │
-    └── Hash starts with "$2b$" / "$2a$" / "$2y$"?
-            └── Verify with bcrypt
-                ├── Valid → Rehash with Argon2id, update DB, proceed
-                └── Invalid → 401
+    ├── Hash starts with "$2b$" / "$2a$" / "$2y$"?
+    │       └── Verify with bcrypt
+    │           ├── Valid → Rehash with Argon2id, update DB, proceed
+    │           └── Invalid → 401
+    │
+    └── Otherwise → attempt Fernet decryption (see §3.3)
 ```
 
-**Password never stored in plaintext** — only the hash is persisted. The migration is transparent to the user.
+**Password never stored in plaintext** — only the hash/token is persisted. The migration is transparent to the user.
 
 **OWASP relevance:**
 - **A02:2021 (Cryptographic Failures)**: Uses the strongest available password hashing algorithm with memory-hard parameters.
 - **API2:2023 (Broken Authentication)**: No weak hashing, no plaintext storage, automatic upgrade path.
+
+### 3.3 Fernet Password Support (User-Management Service)
+
+**File**: `src/core/oauth2.py`
+
+Passwords created by the external **user-management service** are stored as [Fernet](https://cryptography.io/en/latest/fernet/) symmetric encryption tokens rather than hashes. The CrossClientAPI supports these tokens as a third verification path during login.
+
+**Key derivation:**
+
+| Step | Operation |
+|------|-----------|
+| 1 | Read `WF_SECRET_KEY` from environment (loaded from `.env` via `python-dotenv`) |
+| 2 | `SHA-256(WF_SECRET_KEY)` → 32-byte digest |
+| 3 | `base64url(digest)` → valid Fernet key |
+
+**Verification flow:**
+
+```
+Stored token does not match Argon2 or bcrypt format
+    │
+    └── Try Fernet decrypt(token, derived_key)
+            ├── Decrypted == plain_password → Valid, no rehash needed
+            └── InvalidToken / any error   → 401
+```
+
+> **Note**: Fernet is symmetric encryption, not a one-way hash. The key is derived at startup from `WF_SECRET_KEY`. A compromised key means stored tokens can be decrypted. Rotate `WF_SECRET_KEY` if it is ever exposed.
+
+**OWASP relevance:**
+- **API2:2023 (Broken Authentication)**: Interoperability with the user-management service without weakening the primary Argon2id path.
+- **A02:2021 (Cryptographic Failures)**: Key is derived with SHA-256 and never stored or logged.
 
 ---
 
@@ -640,14 +673,15 @@ API keys are **never** logged in full. The masking function reveals only the las
 
 ### Configuration Secrets
 
-Sensitive configuration values are loaded from `config.yml` and stored in typed dataclass instances:
+Sensitive configuration values are loaded from `config.yml` and from `.env` (via `python-dotenv`, loaded in `config_reader.py` at startup), stored in typed dataclass instances:
 
-| Secret | Storage | Notes |
-|--------|---------|-------|
-| API key | `config.api.secret_key` | Should be rotated regularly |
-| JWT signing key | `config.api.oauth2_secret_key` | Must be changed from default |
-| DB password | `config.database.password` | Per-environment config |
-| SMTP password | `config.mail.password` | Optional |
+| Secret | Source | Notes |
+|--------|--------|-------|
+| API key | `config.yml` → `config.api.secret_key` | Should be rotated regularly |
+| JWT signing key | `config.yml` → `config.api.oauth2_secret_key` | Must be changed from default |
+| DB password | `config.yml` → `config.database.password` | Per-environment config |
+| SMTP password | `config.yml` → `config.mail.password` | Optional |
+| Fernet key material | `.env` → `WF_SECRET_KEY` env var | Shared with user-management service; injected at runtime, never baked into the image |
 
 ### Frozen Configuration
 
@@ -675,11 +709,13 @@ Sensitive configuration values are loaded from `config.yml` and stored in typed 
 
 Automated deployment script with clean container lifecycle:
 
-1. Stop existing container
-2. Remove existing container
-3. Build new image
-4. Run new container with restart policy (`--restart unless-stopped`)
-5. External config volume mount (secrets not baked into image)
+1. Resolve `WF_SECRET_KEY` — reads from the environment or falls back to parsing `.env`; **aborts with an error if not set**
+2. Stop existing container
+3. Remove existing container
+4. Build new image
+5. Run new container with restart policy (`--restart unless-stopped`)
+6. External config volume mount (secrets not baked into image)
+7. `WF_SECRET_KEY` injected at runtime via `-e "WF_SECRET_KEY=..."` (never embedded in the image layer)
 
 ---
 
@@ -726,7 +762,8 @@ Middleware executes in the **reverse** order of registration. The effective proc
 | `sqlalchemy[all,asyncio]` | >= 2.0.44 | ORM with parameterized query protection |
 | `slowapi` | >= 0.1.9 | Rate limiting middleware |
 | `asyncpg[all]` | >= 0.31.0 | Async PostgreSQL driver |
-| `cryptography` | (transitive) | Low-level cryptographic operations |
+| `cryptography` | >= 44.0.0 | Low-level cryptographic operations; provides Fernet |
+| `python-dotenv` | >= 1.0.0 | Loads `WF_SECRET_KEY` and other secrets from `.env` at startup |
 
 **Supply chain protections:**
 - `uv.lock` file locks exact dependency versions (reproducible builds)
@@ -753,6 +790,7 @@ Areas for further hardening before production deployment:
 | **Medium** | HTTPS | Self-signed certificates | Use trusted CA certificates (Let's Encrypt) for production |
 | **Low** | JWT algorithm | HS256 (symmetric) | Consider RS256 (asymmetric) for multi-service architectures |
 | **Low** | Token refresh | No refresh token mechanism | Implement refresh tokens for better UX without extending access token lifetime |
+| **High** | Fernet key exposure | `WF_SECRET_KEY` allows token decryption | Rotate `WF_SECRET_KEY` immediately if exposed; treat it as a primary secret |
 | **Low** | Account lockout | Not implemented | Lock accounts after N failed login attempts |
 | **Low** | HSTS | Not set | Add `Strict-Transport-Security` header |
 
@@ -770,5 +808,5 @@ Areas for further hardening before production deployment:
 
 ---
 
-**Version:** 0.0.22
-**Last Updated:** 2026-02-25
+**Version:** 0.0.23
+**Last Updated:** 2026-03-16
