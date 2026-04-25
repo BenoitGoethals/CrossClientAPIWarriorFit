@@ -4,7 +4,7 @@ database:
   port: 5432
   username: benoi
   password: ranger14
-  database: warriorfit_test
+  database: warriorfit_prod
 
 api:
   secret_key: warriorfit_cross_the_world
