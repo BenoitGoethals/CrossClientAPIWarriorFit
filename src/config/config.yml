@@ -1,0 +1,24 @@
+database:
+  driver: postgresql+asyncpg  # or sqlite+aiosqlite, mysql+aiomysql
+  host: 192.168.0.30
+  port: 5432
+  username: benoi
+  password: ranger14
+  database: warriorfit_prod
+
+api:
+  secret_key: warriorfit_cross_the_world
+  oauth2_secret_key: warriorfit_oauth2_jwt_secret_key_change_in_production
+  algorithm: HS256
+  access_token_expire_minutes: 30
+
+
+mail:
+  host: 192.168.0.30
+  password: R@nger&1401!
+  port: 1025
+  sender: noreplay.benoit@albatros.be
+  sender_email: benoit@albatros.be
+  use_ssl: false
+  use_tls: false
+  username: benoit

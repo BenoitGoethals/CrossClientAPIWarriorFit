@@ -1,0 +1,194 @@
+### WarriorFit API — HTTP Test Suite
+### Base URL and auth are configured in http-client.env.json
+### Run each request by clicking the ▶ button next to ###
+
+### ─────────────────────────────────────────────────────
+### 1. AUTHENTICATION
+### ─────────────────────────────────────────────────────
+
+### 1a. Login (OAuth2) — stores token in warriorfit_token variable
+# @name login
+POST {{base_url}}/token
+Content-Type: application/x-www-form-urlencoded
+
+username={{username}}&password={{password}}
+
+> {%
+    client.test("Login returns 200", function() {
+        client.assert(response.status === 200, "Expected 200, got " + response.status);
+    });
+    client.test("Response has access_token", function() {
+        client.assert(response.body.access_token !== undefined, "No access_token in response");
+    });
+    client.global.set("warriorfit_token", response.body.access_token);
+%}
+
+### 1b. Login — wrong credentials (expect 401)
+POST {{base_url}}/token
+Content-Type: application/x-www-form-urlencoded
+
+username=wrong_user&password=wrong_pass
+
+> {%
+    client.test("Wrong credentials returns 401", function() {
+        client.assert(response.status === 401, "Expected 401, got " + response.status);
+    });
+%}
+
+### ─────────────────────────────────────────────────────
+### 2. GET /crosses — List All Crosses
+### ─────────────────────────────────────────────────────
+
+### 2a. API Key auth
+GET {{base_url}}/crosses
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("GET /crosses with API key returns 200", function() {
+        client.assert(response.status === 200, "Expected 200, got " + response.status);
+    });
+    client.test("Response is an array", function() {
+        client.assert(Array.isArray(response.body), "Expected array");
+    });
+%}
+
+### 2b. Bearer token auth
+GET {{base_url}}/crosses
+Authorization: Bearer {{warriorfit_token}}
+
+> {%
+    client.test("GET /crosses with Bearer token returns 200", function() {
+        client.assert(response.status === 200, "Expected 200, got " + response.status);
+    });
+%}
+
+### 2c. No auth (expect 403)
+GET {{base_url}}/crosses
+
+> {%
+    client.test("GET /crosses without auth returns 403", function() {
+        client.assert(response.status === 403, "Expected 403, got " + response.status);
+    });
+%}
+
+### ─────────────────────────────────────────────────────
+### 3. GET /crosses/{id_cross} — Single Cross
+### ─────────────────────────────────────────────────────
+
+### 3a. Get cross by ID (API Key)
+GET {{base_url}}/crosses/1
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("GET /crosses/1 returns 200", function() {
+        client.assert(response.status === 200, "Expected 200, got " + response.status);
+    });
+    client.test("Response has id field", function() {
+        client.assert(response.body.id !== undefined, "No id in response");
+    });
+%}
+
+### 3b. Get cross — not found (expect 404)
+GET {{base_url}}/crosses/99999
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("GET /crosses/99999 returns 404", function() {
+        client.assert(response.status === 404, "Expected 404, got " + response.status);
+    });
+%}
+
+### 3c. Get cross — invalid ID (expect 422)
+GET {{base_url}}/crosses/0
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("GET /crosses/0 returns 422 (validation error)", function() {
+        client.assert(response.status === 422, "Expected 422, got " + response.status);
+    });
+%}
+
+### ─────────────────────────────────────────────────────
+### 4. GET /crosses/runners/{cross_id} — Runners for a Cross
+### ─────────────────────────────────────────────────────
+
+### 4a. Get runners for cross 1
+GET {{base_url}}/crosses/runners/1
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("GET /crosses/runners/1 returns 200", function() {
+        client.assert(response.status === 200, "Expected 200, got " + response.status);
+    });
+    client.test("Response is an array", function() {
+        client.assert(Array.isArray(response.body), "Expected array");
+    });
+%}
+
+### ─────────────────────────────────────────────────────
+### 5. POST /crosses/{serial_number}/{id_cross} — Add Runner
+### ─────────────────────────────────────────────────────
+
+### 5a. Add runner RUNNER001 to cross 1
+POST {{base_url}}/crosses/RUNNER001/1
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("Add runner returns 201", function() {
+        client.assert(response.status === 201, "Expected 201, got " + response.status);
+    });
+%}
+
+### 5b. Alternate route — add runner
+POST {{base_url}}/crosses/runner/RUNNER002/1
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("Alternate add runner returns 201", function() {
+        client.assert(response.status === 201, "Expected 201, got " + response.status);
+    });
+%}
+
+### 5c. Invalid serial number (too long, expect 422)
+POST {{base_url}}/crosses/TOOLONGSERIAL999/1
+X-API-Key: {{api_key}}
+
+> {%
+    client.test("Invalid serial returns 422", function() {
+        client.assert(response.status === 422, "Expected 422, got " + response.status);
+    });
+%}
+
+### ─────────────────────────────────────────────────────
+### 6. POST /crosses/{cross_id} — Save Bulk Recordings
+### ─────────────────────────────────────────────────────
+
+### 6a. Save bulk recordings for cross 1
+POST {{base_url}}/crosses/1
+X-API-Key: {{api_key}}
+Content-Type: application/json
+
+[
+  { "serial_number": "RUNNER001", "time": 125.5 },
+  { "serial_number": "RUNNER002", "time": 132.3 },
+  { "serial_number": "RUNNER003", "time": 118.7 }
+]
+
+> {%
+    client.test("Save bulk recordings returns 201", function() {
+        client.assert(response.status === 201, "Expected 201, got " + response.status);
+    });
+%}
+
+### 6b. Save empty recordings (expect 400)
+POST {{base_url}}/crosses/1
+X-API-Key: {{api_key}}
+Content-Type: application/json
+
+[]
+
+> {%
+    client.test("Empty recordings returns 400", function() {
+        client.assert(response.status === 400, "Expected 400, got " + response.status);
+    });
+%}
